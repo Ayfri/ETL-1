@@ -16,13 +16,25 @@
 
     // Filtres
     let selectedCategories = $state<Set<string>>(new Set());
-    const categories = ['Snacks', 'Beverages', 'Dairy', 'Fruits', 'Vegetables', 'Meat', 'Bakery', 'Sweets'];
+    const categories = ['Bakery', 'Beverages', 'Dairy', 'Fruits', 'Meat', 'Snacks', 'Sweets', 'Vegetables'];
+
+    // Tri
+    let sortBy = $state<string>('name');
+    let sortOrder = $state<'asc' | 'desc'>('asc');
+    const sortOptions = [
+        { value: 'name', label: 'Nom' },
+        { value: 'calories', label: 'Calories' },
+        { value: 'protein', label: 'Protéines' },
+        { value: 'carbs', label: 'Glucides' },
+        { value: 'fat', label: 'Lipides' }
+    ];
 
     async function loadFoods() {
         loadError = null;
         try {
             const categoryParam = selectedCategories.size > 0 ? `&category=${Array.from(selectedCategories).join(',')}` : '';
-            const res = await fetch(`/api/foods?page=${page}&limit=${limit}${categoryParam}`);
+            const sortParam = `&sort=${sortBy}&order=${sortOrder}`;
+            const res = await fetch(`/api/foods?page=${page}&limit=${limit}${categoryParam}${sortParam}`);
             const text = await res.text();
             if (!res.ok) {
                 let serverMsg = text;
@@ -56,6 +68,17 @@
             selectedCategories.add(category);
         }
         selectedCategories = new Set(selectedCategories); // trigger reactivity
+        page = 1; // reset to first page
+        loadFoods();
+    }
+
+    function changeSort(newSortBy: string) {
+        if (sortBy === newSortBy) {
+            sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortBy = newSortBy;
+            sortOrder = 'asc';
+        }
         page = 1; // reset to first page
         loadFoods();
     }
@@ -102,20 +125,72 @@
 			</p>
 		</header>
 
-		<!-- Filters -->
-		<div class="mb-8">
-			<h2 class="text-xl font-semibold text-gray-800 mb-4">Filtres par catégorie</h2>
-			<div class="flex flex-wrap gap-2">
-				{#each categories as category}
-					<button
-						class="px-4 py-2 rounded-full text-sm font-medium transition-all {selectedCategories.has(category)
-							? 'bg-emerald-500 text-white shadow-md'
-							: 'bg-white text-gray-700 border border-gray-300 hover:border-emerald-400 hover:bg-emerald-50'}"
-						onclick={() => toggleCategory(category)}
-					>
-						{category}
-					</button>
-				{/each}
+		<!-- Filters and Controls -->
+		<div class="mb-8 space-y-6">
+			<!-- Filters -->
+			<div>
+				<h2 class="text-xl font-semibold text-gray-800 mb-4">Filtres par catégorie</h2>
+				<div class="flex flex-wrap gap-2">
+					{#each categories as category}
+						<button
+							class="px-4 py-2 rounded-full text-sm font-medium transition-all {selectedCategories.has(category)
+								? 'bg-emerald-500 text-white shadow-md'
+								: 'bg-white text-gray-700 border border-gray-300 hover:border-emerald-400 hover:bg-emerald-50'}"
+							onclick={() => toggleCategory(category)}
+						>
+							{category}
+						</button>
+					{/each}
+				</div>
+			</div>
+
+			<!-- Sort and Pagination Controls -->
+			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+				<!-- Sort Controls -->
+				<div class="flex items-center gap-4">
+					<span class="text-sm font-medium text-gray-700">Trier par:</span>
+					<div class="flex gap-2">
+						{#each sortOptions as option}
+							<button
+								class="px-3 py-1 text-sm rounded-md transition-all {sortBy === option.value
+									? 'bg-emerald-500 text-white'
+									: 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+								onclick={() => changeSort(option.value)}
+							>
+								{option.label} {sortBy === option.value ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+							</button>
+						{/each}
+					</div>
+				</div>
+
+				<!-- Product Count -->
+				<div class="text-sm text-gray-600">
+					{foods.length} produits affichés sur {total} au total
+				</div>
+			</div>
+
+			<!-- Pagination -->
+			<div class="flex items-center justify-center gap-4 bg-white/80 backdrop-blur-sm rounded-lg px-6 py-3 shadow-sm">
+				<button onclick={prevPage} disabled={page <= 1} class="px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
+					Précédent
+				</button>
+				
+				<div class="flex items-center gap-2">
+					<span class="text-sm font-medium">Page</span>
+					<input 
+						type="number" 
+						min="1" 
+						max={Math.max(1, Math.ceil(total / limit))} 
+						value={page} 
+						onchange={(e) => goToPage(parseInt(e.target.value) || 1)}
+						class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
+					/>
+					<span class="text-sm">sur {Math.max(1, Math.ceil(total / limit))}</span>
+				</div>
+				
+				<button onclick={nextPage} disabled={page >= Math.max(1, Math.ceil(total / limit))} class="px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
+					Suivant
+				</button>
 			</div>
 		</div>
 
@@ -133,28 +208,4 @@
 
 	<!-- Details Panel -->
 	<FoodDetails food={selectedFood} onclose={closeDetails} />
-
-	<!-- Pagination -->
-	<div class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md rounded-full px-6 py-3 shadow-lg flex items-center gap-4">
-		<button onclick={prevPage} disabled={page <= 1} class="px-3 py-1 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
-			Précédent
-		</button>
-		
-		<div class="flex items-center gap-2">
-			<span class="text-sm font-medium">Page</span>
-			<input 
-				type="number" 
-				min="1" 
-				max={Math.max(1, Math.ceil(total / limit))} 
-				value={page} 
-				onchange={(e) => goToPage(parseInt(e.target.value) || 1)}
-				class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
-			/>
-			<span class="text-sm">sur {Math.max(1, Math.ceil(total / limit))}</span>
-		</div>
-		
-		<button onclick={nextPage} disabled={page >= Math.max(1, Math.ceil(total / limit))} class="px-3 py-1 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
-			Suivant
-		</button>
-	</div>
 </div>

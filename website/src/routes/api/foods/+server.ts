@@ -53,6 +53,8 @@ export async function GET({ url }) {
     const limit = parseInt(url.searchParams.get('limit') || '100', 10) || 100;
     const category = url.searchParams.get('category') || '';
     const categories = category ? category.split(',').map(c => c.trim().toLowerCase()) : [];
+    const sortBy = url.searchParams.get('sort') || 'name';
+    const sortOrder = url.searchParams.get('order') || 'asc';
     const start = (page - 1) * limit;
 
     // Prefer processed filtered CSV if available, fall back to raw sample
@@ -74,9 +76,7 @@ export async function GET({ url }) {
     const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
     let headers: string[] | null = null;
-    let rowIndex = 0; // zero-based index for data rows (excluding header)
-    const selectedRows: Record<string, string>[] = [];
-    let totalRows = 0;
+    const allFilteredRows: Record<string, string>[] = [];
 
     for await (const line of rl) {
       if (!headers) {
@@ -98,15 +98,46 @@ export async function GET({ url }) {
         }
       }
 
-      totalRows++;
-
-      // only collect rows in the requested window
-      if (rowIndex >= start && selectedRows.length < limit) {
-        selectedRows.push(obj);
-      }
-
-      rowIndex++;
+      allFilteredRows.push(obj);
     }
+
+    // Sort the filtered rows
+    allFilteredRows.sort((a, b) => {
+      let aVal: any, bVal: any;
+      switch (sortBy) {
+        case 'name':
+          aVal = (a['product_name'] || a['generic_name'] || 'Unknown').toLowerCase();
+          bVal = (b['product_name'] || b['generic_name'] || 'Unknown').toLowerCase();
+          break;
+        case 'calories':
+          aVal = parseFloat(a['energy-kcal_100g'] || a['energy_100g'] || '0') || 0;
+          bVal = parseFloat(b['energy-kcal_100g'] || b['energy_100g'] || '0') || 0;
+          break;
+        case 'protein':
+          aVal = parseFloat(a['proteins_100g'] || '0') || 0;
+          bVal = parseFloat(b['proteins_100g'] || '0') || 0;
+          break;
+        case 'carbs':
+          aVal = parseFloat(a['carbohydrates_100g'] || '0') || 0;
+          bVal = parseFloat(b['carbohydrates_100g'] || '0') || 0;
+          break;
+        case 'fat':
+          aVal = parseFloat(a['fat_100g'] || '0') || 0;
+          bVal = parseFloat(b['fat_100g'] || '0') || 0;
+          break;
+        default:
+          aVal = (a['product_name'] || a['generic_name'] || 'Unknown').toLowerCase();
+          bVal = (b['product_name'] || b['generic_name'] || 'Unknown').toLowerCase();
+      }
+      
+      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    // Apply pagination
+    const selectedRows = allFilteredRows.slice(start, start + limit);
+    const totalRows = allFilteredRows.length;
 
     const foods = selectedRows.map((r, idx) => {
       const calories = parseFloat(r['energy-kcal_100g'] || r['energy_100g'] || '0') || 0;
