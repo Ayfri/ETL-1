@@ -4,8 +4,6 @@ Script to download Open Food Facts data.
 Downloads the complete product database as a compressed CSV file.
 """
 
-import os
-import gzip
 import requests
 from pathlib import Path
 from tqdm import tqdm
@@ -25,26 +23,33 @@ def download_open_food_facts():
 
     temp_file = RAW_DATA_DIR / "temp_openfoodfacts.csv.gz"
 
-    print(f"Downloading Open Food Facts data to temporary file...")
-    print("This may take several minutes as the file is quite large (~2-3 GB)")
+    if OUTPUT_FILE.exists():
+        print(f"Sample file already exists at {OUTPUT_FILE}. Skipping download.")
+        return
 
-    # Download with progress
-    response = requests.get(DATA_URL, stream=True)
-    response.raise_for_status()
+    if temp_file.exists():
+        print(f"Raw data file {temp_file} already exists. Skipping download.")
+    else:
+        print(f"Downloading Open Food Facts data to temporary file...")
+        print("This may take several minutes as the file is quite large (~2-3 GB)")
 
-    total_size = int(response.headers.get('content-length', 0))
+        # Download with progress
+        response = requests.get(DATA_URL, stream=True)
+        response.raise_for_status()
 
-    with open(temp_file, 'wb') as f:
-        with tqdm(total=total_size, unit='B', unit_scale=True, desc="Downloading") as pbar:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
-                    pbar.update(len(chunk))
+        total_size = int(response.headers.get('content-length', 0))
+
+        with open(temp_file, 'wb') as f:
+            with tqdm(total=total_size, unit='B', unit_scale=True, desc="Downloading") as pbar:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        pbar.update(len(chunk))
 
     print("Download complete! Now extracting first 100,000 products using pandas...")
 
     # Use pandas to read first 100k rows from the gzipped CSV
-    df = pd.read_csv(temp_file, nrows=100000, low_memory=False)
+    df = pd.read_csv(temp_file, nrows=100000, low_memory=False, sep='\t')
     df.to_csv(OUTPUT_FILE, index=False)
 
     # Remove temp file
