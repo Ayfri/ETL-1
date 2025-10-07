@@ -11,7 +11,7 @@
 </script>
 
 {#if food}
-	<div class="fixed inset-y-0 right-0 w-full md:w-96 bg-white shadow-2xl z-50 overflow-y-auto transform translate-x-0 transition-transform duration-500 ease-in-out">
+	<div class="h-full bg-white overflow-y-auto">
 		<div class="sticky top-0 bg-white border-b border-gray-200 p-4 flex justify-between items-center">
 			<h2 class="text-2xl font-bold text-gray-900">Détails</h2>
 			<button

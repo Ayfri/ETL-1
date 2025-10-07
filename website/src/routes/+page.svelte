@@ -144,7 +144,7 @@
 </script>
 
 <div class="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50">
-	<div class="max-w-7xl px-4 sm:px-6 lg:px-8 py-8 transition-all duration-500 ease-in-out" style="margin-left: {selectedFood ? 'auto' : 'auto'}; margin-right: {selectedFood ? '28rem' : 'auto'}">
+	<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 transition-transform duration-500 ease-in-out {selectedFood ? '-translate-x-64' : 'translate-x-0'}">
 		<!-- Header -->
 		<header class="text-center mb-8">
 			<div class="flex items-center justify-center gap-3 mb-2">
@@ -251,9 +251,9 @@
 	</div>
 
 	<!-- Details Panel -->
-	{#if selectedFood}
-		<div class="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out">
+	<div class="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl z-50 transition-all duration-500 ease-in-out {selectedFood ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}">
+		{#if selectedFood}
 			<FoodDetails food={selectedFood} onclose={closeDetails} />
-		</div>
-	{/if}
+		{/if}
+	</div>
 </div>
