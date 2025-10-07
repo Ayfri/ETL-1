@@ -133,7 +133,7 @@
 				<div class="flex flex-wrap gap-2">
 					{#each categories as category}
 						<button
-							class="px-4 py-2 rounded-full text-sm font-medium transition-all {selectedCategories.has(category)
+							class="cursor-pointer px-4 py-2 rounded-full text-sm font-medium transition-all {selectedCategories.has(category)
 								? 'bg-emerald-500 text-white shadow-md'
 								: 'bg-white text-gray-700 border border-gray-300 hover:border-emerald-400 hover:bg-emerald-50'}"
 							onclick={() => toggleCategory(category)}
@@ -152,7 +152,7 @@
 					<div class="flex gap-2">
 						{#each sortOptions as option}
 							<button
-								class="px-3 py-1 text-sm rounded-md transition-all {sortBy === option.value
+								class="cursor-pointer px-3 py-1 text-sm rounded-md transition-all {sortBy === option.value
 									? 'bg-emerald-500 text-white'
 									: 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
 								onclick={() => changeSort(option.value)}
@@ -171,7 +171,7 @@
 
 			<!-- Pagination -->
 			<div class="flex items-center justify-center gap-4 bg-white/80 backdrop-blur-sm rounded-lg px-6 py-3 shadow-sm">
-				<button onclick={prevPage} disabled={page <= 1} class="px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
+				<button onclick={prevPage} disabled={page <= 1} class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
 					Précédent
 				</button>
 				
@@ -188,7 +188,7 @@
 					<span class="text-sm">sur {Math.max(1, Math.ceil(total / limit))}</span>
 				</div>
 				
-				<button onclick={nextPage} disabled={page >= Math.max(1, Math.ceil(total / limit))} class="px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
+				<button onclick={nextPage} disabled={page >= Math.max(1, Math.ceil(total / limit))} class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
 					Suivant
 				</button>
 			</div>
