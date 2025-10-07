@@ -53,8 +53,10 @@ export async function GET({ url }) {
     const limit = parseInt(url.searchParams.get('limit') || '100', 10) || 100;
     const start = (page - 1) * limit;
 
-    // Try common locations for the CSV: project root `data/raw/...` or website parent
+    // Prefer processed filtered CSV if available, fall back to raw sample
     const candidatePaths = [
+      path.resolve(process.cwd(), 'data', 'processed', 'openfoodfacts_filtered.csv'),
+      path.resolve(process.cwd(), '..', 'data', 'processed', 'openfoodfacts_filtered.csv'),
       path.resolve(process.cwd(), 'data', 'raw', 'openfoodfacts_sample.csv'),
       path.resolve(process.cwd(), '..', 'data', 'raw', 'openfoodfacts_sample.csv')
     ];
