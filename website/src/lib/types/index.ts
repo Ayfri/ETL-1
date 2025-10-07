@@ -3,6 +3,7 @@ export interface Food {
 	name: string;
 	type: string;
 	image: string;
+    url?: string;
 	nutrition: {
 		calories: number;
 		protein: number;

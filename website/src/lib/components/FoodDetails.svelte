@@ -149,4 +149,12 @@
 		class="fixed inset-0 bg-black/50 z-40 md:hidden"
 		aria-label="Fermer le panneau"
 	></button>
+
+	{#if food?.url}
+		<div class="fixed bottom-6 right-6 z-60">
+			<a href={food.url} target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg shadow-lg">
+				Ouvrir la source
+			</a>
+		</div>
+	{/if}
 {/if}
