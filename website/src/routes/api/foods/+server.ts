@@ -3,6 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
+let cachedData: Record<string, string>[] | null = null;
+
 function splitCSVLine(line: string) {
 	const result: string[] = [];
 	let cur = '';
@@ -27,24 +29,45 @@ function splitCSVLine(line: string) {
 	return result;
 }
 
-function parseCSV(text: string) {
-	const lines = text.split(/\r?\n/);
- 	const headerLine = lines.shift();
- 	if (!headerLine) return [];
- 	const headers = splitCSVLine(headerLine).map(h => h.trim());
- 	const rows = [] as Record<string, string>[];
- 	for (const line of lines) {
- 		if (!line) continue;
- 		const values = splitCSVLine(line);
- 		// skip malformed lines
- 		if (values.length === 1 && values[0] === '') continue;
- 		const obj: Record<string, string> = {};
- 		for (let i = 0; i < headers.length; i++) {
- 			obj[headers[i]] = values[i] ?? '';
- 		}
- 		rows.push(obj);
- 	}
- 	return rows;
+async function loadCSVData(): Promise<Record<string, string>[]> {
+	if (cachedData) return cachedData;
+
+	const candidatePaths = [
+		path.resolve(process.cwd(), 'data', 'processed', 'openfoodfacts_filtered.csv'),
+		path.resolve(process.cwd(), '..', 'data', 'processed', 'openfoodfacts_filtered.csv'),
+		path.resolve(process.cwd(), 'data', 'raw', 'openfoodfacts_sample.csv'),
+		path.resolve(process.cwd(), '..', 'data', 'raw', 'openfoodfacts_sample.csv')
+	];
+	let csvPath: string | null = null;
+	for (const p of candidatePaths) {
+		if (fs.existsSync(p)) {
+			csvPath = p;
+			break;
+		}
+	}
+	if (!csvPath) throw new Error(`CSV file not found in ${candidatePaths.join(' or ')}`);
+
+	const stream = fs.createReadStream(csvPath, { encoding: 'utf8' });
+	const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+
+	let headers: string[] | null = null;
+	const rows: Record<string, string>[] = [];
+
+	for await (const line of rl) {
+		if (!headers) {
+			headers = splitCSVLine(line).map(h => h.trim());
+			continue;
+		}
+		if (!line) continue;
+
+		const values = splitCSVLine(line);
+		const obj: Record<string, string> = {};
+		for (let i = 0; i < headers.length; i++) obj[headers[i]] = values[i] ?? '';
+		rows.push(obj);
+	}
+
+	cachedData = rows;
+	return rows;
 }
 
 export async function GET({ url }) {
@@ -57,49 +80,15 @@ export async function GET({ url }) {
     const sortOrder = url.searchParams.get('order') || 'asc';
     const start = (page - 1) * limit;
 
-    // Prefer processed filtered CSV if available, fall back to raw sample
-    const candidatePaths = [
-      path.resolve(process.cwd(), 'data', 'processed', 'openfoodfacts_filtered.csv'),
-      path.resolve(process.cwd(), '..', 'data', 'processed', 'openfoodfacts_filtered.csv'),
-      path.resolve(process.cwd(), 'data', 'raw', 'openfoodfacts_sample.csv'),
-      path.resolve(process.cwd(), '..', 'data', 'raw', 'openfoodfacts_sample.csv')
-    ];
-    let csvPath: string | null = null;
-    for (const p of candidatePaths) {
-      if (fs.existsSync(p)) {
-        csvPath = p;
-        break;
-      }
-    }
-    if (!csvPath) throw new Error(`CSV file not found in ${candidatePaths.join(' or ')}`);
-    const stream = fs.createReadStream(csvPath, { encoding: 'utf8' });
-    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+    const allRows = await loadCSVData();
 
-    let headers: string[] | null = null;
-    const allFilteredRows: Record<string, string>[] = [];
-
-    for await (const line of rl) {
-      if (!headers) {
-        headers = splitCSVLine(line).map(h => h.trim());
-        continue;
-      }
-      if (!line) continue;
-
-      const values = splitCSVLine(line);
-      const obj: Record<string, string> = {};
-      for (let i = 0; i < headers.length; i++) obj[headers[i]] = values[i] ?? '';
-
-      // Filter by category if specified
-      if (categories.length > 0) {
-        const productCategories = (obj['categories'] || '').toLowerCase();
-        const hasMatch = categories.some(cat => productCategories.includes(cat));
-        if (!hasMatch) {
-          continue;
-        }
-      }
-
-      allFilteredRows.push(obj);
-    }
+    // Filter by category if specified
+    const allFilteredRows = categories.length > 0
+      ? allRows.filter(obj => {
+          const productCategories = (obj['categories'] || '').toLowerCase();
+          return categories.some(cat => productCategories.includes(cat));
+        })
+      : allRows;
 
     // Sort the filtered rows
     allFilteredRows.sort((a, b) => {

@@ -29,6 +29,8 @@
         { value: 'fat', label: 'Lipides' }
     ];
 
+    let loadTimeout: number | null = null;
+
     async function loadFoods() {
         loadError = null;
         try {
@@ -59,6 +61,13 @@
         }
     }
 
+    function debouncedLoadFoods() {
+        if (loadTimeout) clearTimeout(loadTimeout);
+        loadTimeout = setTimeout(() => {
+            loadFoods();
+        }, 300); // 300ms debounce
+    }
+
     onMount(loadFoods);
 
     function toggleCategory(category: string) {
@@ -69,7 +78,7 @@
         }
         selectedCategories = new Set(selectedCategories); // trigger reactivity
         page = 1; // reset to first page
-        loadFoods();
+        debouncedLoadFoods();
     }
 
     function changeSort(newSortBy: string) {
@@ -80,7 +89,7 @@
             sortOrder = 'asc';
         }
         page = 1; // reset to first page
-        loadFoods();
+        debouncedLoadFoods();
     }
 
     function nextPage() {
