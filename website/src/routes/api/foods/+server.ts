@@ -51,6 +51,8 @@ export async function GET({ url }) {
   try {
     const page = parseInt(url.searchParams.get('page') || '1', 10) || 1;
     const limit = parseInt(url.searchParams.get('limit') || '100', 10) || 100;
+    const category = url.searchParams.get('category') || '';
+    const categories = category ? category.split(',').map(c => c.trim().toLowerCase()) : [];
     const start = (page - 1) * limit;
 
     // Prefer processed filtered CSV if available, fall back to raw sample
@@ -74,6 +76,7 @@ export async function GET({ url }) {
     let headers: string[] | null = null;
     let rowIndex = 0; // zero-based index for data rows (excluding header)
     const selectedRows: Record<string, string>[] = [];
+    let totalRows = 0;
 
     for await (const line of rl) {
       if (!headers) {
@@ -82,11 +85,23 @@ export async function GET({ url }) {
       }
       if (!line) continue;
 
+      const values = splitCSVLine(line);
+      const obj: Record<string, string> = {};
+      for (let i = 0; i < headers.length; i++) obj[headers[i]] = values[i] ?? '';
+
+      // Filter by category if specified
+      if (categories.length > 0) {
+        const productCategories = (obj['categories'] || '').toLowerCase();
+        const hasMatch = categories.some(cat => productCategories.includes(cat));
+        if (!hasMatch) {
+          continue;
+        }
+      }
+
+      totalRows++;
+
       // only collect rows in the requested window
       if (rowIndex >= start && selectedRows.length < limit) {
-        const values = splitCSVLine(line);
-        const obj: Record<string, string> = {};
-        for (let i = 0; i < headers.length; i++) obj[headers[i]] = values[i] ?? '';
         selectedRows.push(obj);
       }
 
@@ -122,7 +137,7 @@ export async function GET({ url }) {
       };
     });
 
-    return new Response(JSON.stringify({ data: foods, total: rowIndex, page, limit }), {
+    return new Response(JSON.stringify({ data: foods, total: totalRows, page, limit }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (err) {

@@ -14,10 +14,15 @@
 
     let loadError = $state<string | null>(null);
 
+    // Filtres
+    let selectedCategories = $state<Set<string>>(new Set());
+    const categories = ['Snacks', 'Beverages', 'Dairy', 'Fruits', 'Vegetables', 'Meat', 'Bakery', 'Sweets'];
+
     async function loadFoods() {
         loadError = null;
         try {
-            const res = await fetch(`/api/foods?page=${page}&limit=${limit}`);
+            const categoryParam = selectedCategories.size > 0 ? `&category=${Array.from(selectedCategories).join(',')}` : '';
+            const res = await fetch(`/api/foods?page=${page}&limit=${limit}${categoryParam}`);
             const text = await res.text();
             if (!res.ok) {
                 let serverMsg = text;
@@ -44,6 +49,17 @@
 
     onMount(loadFoods);
 
+    function toggleCategory(category: string) {
+        if (selectedCategories.has(category)) {
+            selectedCategories.delete(category);
+        } else {
+            selectedCategories.add(category);
+        }
+        selectedCategories = new Set(selectedCategories); // trigger reactivity
+        page = 1; // reset to first page
+        loadFoods();
+    }
+
     function nextPage() {
         const maxPage = Math.max(1, Math.ceil(total / limit));
         if (page < maxPage) {
@@ -55,6 +71,14 @@
     function prevPage() {
         if (page > 1) {
             page = page - 1;
+            loadFoods();
+        }
+    }
+
+    function goToPage(newPage: number) {
+        const maxPage = Math.max(1, Math.ceil(total / limit));
+        if (newPage >= 1 && newPage <= maxPage) {
+            page = newPage;
             loadFoods();
         }
     }
@@ -71,27 +95,29 @@
 <div class="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50">
 	<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 		<!-- Header -->
-		<header class="text-center mb-12">
-			<h1 class="text-5xl font-bold text-gray-900 mb-3">Encyclopédie Nutritionnelle</h1>
-			<p class="text-xl text-gray-600 mb-8">
+		<header class="text-center mb-8">
+			<h1 class="text-4xl font-bold text-gray-900 mb-2">Encyclopédie Nutritionnelle</h1>
+			<p class="text-lg text-gray-600">
 				Explorez les aliments et importez des données Open Food Facts
 			</p>
-
-			<div class="flex flex-wrap justify-center gap-4">
-				<button
-					class="inline-flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-200 rounded-lg hover:border-emerald-400 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md"
-				>
-					<span class="text-2xl">📖</span>
-					<span class="font-medium">Encyclopédie</span>
-				</button>
-				<button
-					class="inline-flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-200 rounded-lg hover:border-emerald-400 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md"
-				>
-					<span class="text-2xl">📄</span>
-					<span class="font-medium">Importer CSV</span>
-				</button>
-			</div>
 		</header>
+
+		<!-- Filters -->
+		<div class="mb-8">
+			<h2 class="text-xl font-semibold text-gray-800 mb-4">Filtres par catégorie</h2>
+			<div class="flex flex-wrap gap-2">
+				{#each categories as category}
+					<button
+						class="px-4 py-2 rounded-full text-sm font-medium transition-all {selectedCategories.has(category)
+							? 'bg-emerald-500 text-white shadow-md'
+							: 'bg-white text-gray-700 border border-gray-300 hover:border-emerald-400 hover:bg-emerald-50'}"
+						onclick={() => toggleCategory(category)}
+					>
+						{category}
+					</button>
+				{/each}
+			</div>
+		</div>
 
 		<!-- Food Grid -->
 		<div
@@ -109,9 +135,26 @@
 	<FoodDetails food={selectedFood} onclose={closeDetails} />
 
 	<!-- Pagination -->
-	<div class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-md rounded-full px-4 py-2 shadow-lg flex items-center gap-3">
-		<button onclick={prevPage} class="px-3 py-1 bg-gray-100 rounded-md">Préc</button>
-		<span class="text-sm">Page {page} / {Math.max(1, Math.ceil(total / limit))}</span>
-		<button onclick={nextPage} class="px-3 py-1 bg-gray-100 rounded-md">Suiv</button>
+	<div class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md rounded-full px-6 py-3 shadow-lg flex items-center gap-4">
+		<button onclick={prevPage} disabled={page <= 1} class="px-3 py-1 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
+			Précédent
+		</button>
+		
+		<div class="flex items-center gap-2">
+			<span class="text-sm font-medium">Page</span>
+			<input 
+				type="number" 
+				min="1" 
+				max={Math.max(1, Math.ceil(total / limit))} 
+				value={page} 
+				onchange={(e) => goToPage(parseInt(e.target.value) || 1)}
+				class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
+			/>
+			<span class="text-sm">sur {Math.max(1, Math.ceil(total / limit))}</span>
+		</div>
+		
+		<button onclick={nextPage} disabled={page >= Math.max(1, Math.ceil(total / limit))} class="px-3 py-1 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
+			Suivant
+		</button>
 	</div>
 </div>
