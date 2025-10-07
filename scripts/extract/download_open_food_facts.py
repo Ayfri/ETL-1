@@ -15,22 +15,19 @@ DATA_URL = "https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.
 # Local paths
 RAW_DATA_DIR = Path("data/raw")
 OUTPUT_FILE = RAW_DATA_DIR / "openfoodfacts_sample.csv"
+EXTRACTED_COUNT = 100_000
 
 def download_open_food_facts():
     """Download the Open Food Facts dataset and extract first 100k products."""
     # Create raw data directory if it doesn't exist
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    temp_file = RAW_DATA_DIR / "temp_openfoodfacts.csv.gz"
+    cache_file = RAW_DATA_DIR / "openfoodfacts.csv.gz"
 
-    if OUTPUT_FILE.exists():
-        print(f"Sample file already exists at {OUTPUT_FILE}. Skipping download.")
-        return
-
-    if temp_file.exists():
-        print(f"Raw data file {temp_file} already exists. Skipping download.")
+    if cache_file.exists():
+        print(f"Raw data file {cache_file} already exists. Skipping download.")
     else:
-        print(f"Downloading Open Food Facts data to temporary file...")
+        print(f"Downloading Open Food Facts data to temporary file... {cache_file}")
         print("This may take several minutes as the file is quite large (~2-3 GB)")
 
         # Download with progress
@@ -39,21 +36,18 @@ def download_open_food_facts():
 
         total_size = int(response.headers.get('content-length', 0))
 
-        with open(temp_file, 'wb') as f:
+        with open(cache_file, 'wb') as f:
             with tqdm(total=total_size, unit='B', unit_scale=True, desc="Downloading") as pbar:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
                         pbar.update(len(chunk))
 
-    print("Download complete! Now extracting first 100,000 products using pandas...")
+    print(f"Download complete! Now extracting first {EXTRACTED_COUNT} products using pandas...")
 
-    # Use pandas to read first 100k rows from the gzipped CSV
-    df = pd.read_csv(temp_file, nrows=100000, low_memory=False, sep='\t')
+    # Use pandas to read first 100 rows from the gzipped CSV
+    df = pd.read_csv(cache_file, nrows=EXTRACTED_COUNT, low_memory=False, sep='\t')
     df.to_csv(OUTPUT_FILE, index=False)
-
-    # Remove temp file
-    temp_file.unlink()
 
     # Check file size
     file_size = OUTPUT_FILE.stat().st_size
