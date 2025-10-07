@@ -6,6 +6,13 @@ dist/
 wheels/
 *.egg-info
 
+# IDEs
+.idea/
+.vscode/
+
+# Downloaded CSV files
+*.csv
+*.csv.gz
+
 # Virtual environments
 .venv
-*.csv
