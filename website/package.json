@@ -24,7 +24,11 @@
 	},
 	"pnpm": {
 		"onlyBuiltDependencies": [
+			"@tailwindcss/oxide",
 			"esbuild"
 		]
+	},
+	"dependencies": {
+		"@lucide/svelte": "^0.545.0"
 	}
 }

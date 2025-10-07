@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { X, Check, ExternalLink } from '@lucide/svelte';
 	import type { Food } from '$lib/types';
 
 	interface Props {
@@ -10,28 +11,15 @@
 </script>
 
 {#if food}
-	<div class="fixed inset-y-0 right-0 w-full md:w-96 bg-white shadow-2xl z-50 overflow-y-auto">
+	<div class="fixed inset-y-0 right-0 w-full md:w-96 bg-white shadow-2xl z-50 overflow-y-auto transform translate-x-0 transition-transform duration-500 ease-in-out">
 		<div class="sticky top-0 bg-white border-b border-gray-200 p-4 flex justify-between items-center">
 			<h2 class="text-2xl font-bold text-gray-900">Détails</h2>
 			<button
 				onclick={onclose}
-				class="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+				class="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
 				aria-label="Fermer"
 			>
-				<svg
-					class="w-6 h-6"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-					xmlns="http://www.w3.org/2000/svg"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M6 18L18 6M6 6l12 12"
-					></path>
-				</svg>
+				<X size={20} />
 			</button>
 		</div>
 
@@ -101,17 +89,7 @@
 					<ul class="space-y-2">
 						{#each food.benefits as benefit}
 							<li class="flex items-start">
-								<svg
-									class="w-5 h-5 text-emerald-500 mt-0.5 mr-2 flex-shrink-0"
-									fill="currentColor"
-									viewBox="0 0 20 20"
-								>
-									<path
-										fill-rule="evenodd"
-										d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-										clip-rule="evenodd"
-									></path>
-								</svg>
+								<Check size={16} class="text-emerald-500 mt-0.5 mr-2 flex-shrink-0" />
 								<span class="text-gray-700">{benefit}</span>
 							</li>
 						{/each}
@@ -146,14 +124,15 @@
 	<!-- Backdrop pour mobile -->
 	<button
 		onclick={onclose}
-		class="fixed inset-0 bg-black/50 z-40 md:hidden"
+		class="fixed inset-0 bg-black/50 z-40 md:hidden cursor-pointer"
 		aria-label="Fermer le panneau"
 	></button>
 
 	{#if food?.url}
 		<div class="fixed bottom-6 right-6 z-60">
-			<a href={food.url} target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg shadow-lg">
-				Ouvrir la source
+			<a href={food.url} target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg shadow-lg cursor-pointer">
+				<span>Ouvrir la source</span>
+				<ExternalLink size={16} />
 			</a>
 		</div>
 	{/if}

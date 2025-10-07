@@ -2,6 +2,7 @@
     import { flip } from 'svelte/animate';
     import FoodCard from '$lib/components/FoodCard.svelte';
     import FoodDetails from '$lib/components/FoodDetails.svelte';
+    import { ChevronLeft, ChevronRight, ArrowUp, ArrowDown, BookOpen, Filter, ArrowUpDown } from '@lucide/svelte';
     import type { Food } from '$lib/types';
     import type { PageData } from './$types.js';
 
@@ -143,10 +144,13 @@
 </script>
 
 <div class="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50">
-	<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+	<div class="max-w-7xl px-4 sm:px-6 lg:px-8 py-8 transition-all duration-500 ease-in-out" style="margin-left: {selectedFood ? 'auto' : 'auto'}; margin-right: {selectedFood ? '28rem' : 'auto'}">
 		<!-- Header -->
 		<header class="text-center mb-8">
-			<h1 class="text-4xl font-bold text-gray-900 mb-2">Encyclopédie Nutritionnelle</h1>
+			<div class="flex items-center justify-center gap-3 mb-2">
+				<BookOpen size={40} class="text-emerald-600" />
+				<h1 class="text-4xl font-bold text-gray-900">Encyclopédie Nutritionnelle</h1>
+			</div>
 			<p class="text-lg text-gray-600">
 				Explorez les aliments et importez des données Open Food Facts
 			</p>
@@ -156,7 +160,10 @@
 		<div class="mb-8 space-y-6">
 			<!-- Filters -->
 			<div>
-				<h2 class="text-xl font-semibold text-gray-800 mb-4">Filtres par catégorie</h2>
+				<div class="flex items-center gap-2 mb-4">
+					<Filter size={20} class="text-gray-600" />
+					<h2 class="text-xl font-semibold text-gray-800">Filtres par catégorie</h2>
+				</div>
 				<div class="flex flex-wrap gap-2">
 					{#each categories as category}
 						<button
@@ -175,16 +182,26 @@
 			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
 				<!-- Sort Controls -->
 				<div class="flex items-center gap-4">
-					<span class="text-sm font-medium text-gray-700">Trier par:</span>
+					<div class="flex items-center gap-2">
+						<ArrowUpDown size={16} class="text-gray-600" />
+						<span class="text-sm font-medium text-gray-700">Trier par:</span>
+					</div>
 					<div class="flex gap-2">
 						{#each sortOptions as option}
 							<button
-								class="cursor-pointer px-3 py-1 text-sm rounded-md transition-all {sortBy === option.value
+								class="cursor-pointer px-3 py-1 text-sm rounded-md transition-all flex items-center gap-1 {sortBy === option.value
 									? 'bg-emerald-500 text-white'
 									: 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
 								onclick={() => changeSort(option.value)}
 							>
-								{option.label} {sortBy === option.value ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+								<span>{option.label}</span>
+								{#if sortBy === option.value}
+									{#if sortOrder === 'asc'}
+										<ArrowUp size={14} />
+									{:else}
+										<ArrowDown size={14} />
+									{/if}
+								{/if}
 							</button>
 						{/each}
 					</div>
@@ -199,7 +216,7 @@
 			<!-- Pagination -->
 			<div class="flex items-center justify-center gap-4 bg-white/80 backdrop-blur-sm rounded-lg px-6 py-3 shadow-sm">
 				<button onclick={prevPage} disabled={page <= 1} class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
-					Précédent
+					<ChevronLeft size={16} />
 				</button>
 				
 				<div class="flex items-center gap-2">
@@ -216,16 +233,14 @@
 				</div>
 				
 				<button onclick={nextPage} disabled={page >= Math.max(1, Math.ceil(total / data.limit))} class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
-					Suivant
+					<ChevronRight size={16} />
 				</button>
 			</div>
 		</div>
 
 		<!-- Food Grid -->
 		<div
-			class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 {selectedFood
-				? 'md:mr-96'
-				: ''} transition-all duration-300"
+			class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
 		>
 			{#each foods as food (food.id)}
 				<div animate:flip={{ duration: 300 }}>

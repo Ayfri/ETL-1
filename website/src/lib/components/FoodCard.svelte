@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Check } from '@lucide/svelte';
 	import type { Food } from '$lib/types';
 
 	interface Props {
@@ -11,7 +12,7 @@
 </script>
 
 <button
-	class="group relative overflow-hidden rounded-xl shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 w-full text-left {selected
+	class="group relative overflow-hidden rounded-xl shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 w-full text-left cursor-pointer {selected
 		? 'ring-4 ring-emerald-500'
 		: ''}"
 	{onclick}
@@ -29,7 +30,7 @@
 		<div
 			class="absolute top-3 right-3 w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center text-white font-bold shadow-lg"
 		>
-			✓
+			<Check size={16} />
 		</div>
 	{/if}
 </button>
