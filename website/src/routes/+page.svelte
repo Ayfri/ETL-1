@@ -1,26 +1,33 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { flip } from 'svelte/animate';
     import FoodCard from '$lib/components/FoodCard.svelte';
     import FoodDetails from '$lib/components/FoodDetails.svelte';
     import type { Food } from '$lib/types';
+    import type { PageData } from './$types.js';
+
+    interface Props {
+        data: PageData;
+    }
+
+    let { data }: Props = $props();
 
     let selectedFood = $state<Food | null>(null);
 
     // Données chargées dynamiquement depuis le CSV via l'endpoint avec pagination
     let foods = $state<Food[]>([]);
-    let page = $state<number>(1);
-    const limit = 100;
+    let page = $state<number>(data.page);
     let total = $state<number>(0);
 
     let loadError = $state<string | null>(null);
 
     // Filtres
-    let selectedCategories = $state<Set<string>>(new Set());
+    let selectedCategories = $state<Set<string>>(new Set(data.categories));
     const categories = ['Bakery', 'Beverages', 'Dairy', 'Fruits', 'Meat', 'Snacks', 'Sweets', 'Vegetables'];
 
     // Tri
-    let sortBy = $state<string>('name');
-    let sortOrder = $state<'asc' | 'desc'>('asc');
+    let sortBy = $state<string>(data.sortBy);
+    let sortOrder = $state<'asc' | 'desc'>(data.sortOrder as 'asc' | 'desc');
+
     const sortOptions = [
         { value: 'name', label: 'Nom' },
         { value: 'calories', label: 'Calories' },
@@ -36,7 +43,7 @@
         try {
             const categoryParam = selectedCategories.size > 0 ? `&category=${Array.from(selectedCategories).join(',')}` : '';
             const sortParam = `&sort=${sortBy}&order=${sortOrder}`;
-            const res = await fetch(`/api/foods?page=${page}&limit=${limit}${categoryParam}${sortParam}`);
+            const res = await fetch(`/api/foods?page=${page}&limit=${data.limit}${categoryParam}${sortParam}`);
             const text = await res.text();
             if (!res.ok) {
                 let serverMsg = text;
@@ -68,7 +75,18 @@
         }, 300); // 300ms debounce
     }
 
-    onMount(loadFoods);
+    // Charger les données initiales depuis le load avec streaming
+    $effect(() => {
+        if (data.foods) {
+            data.foods.then((result: any) => {
+                foods = result.data || [];
+                total = result.total || 0;
+            }).catch((err: any) => {
+                console.error('Erreur chargement initial', err);
+                loadError = 'Erreur de chargement initial';
+            });
+        }
+    });
 
     function toggleCategory(category: string) {
         if (selectedCategories.has(category)) {
@@ -93,7 +111,7 @@
     }
 
     function nextPage() {
-        const maxPage = Math.max(1, Math.ceil(total / limit));
+        const maxPage = Math.max(1, Math.ceil(total / data.limit));
         if (page < maxPage) {
             page = page + 1;
             loadFoods();
@@ -108,7 +126,7 @@
     }
 
     function goToPage(newPage: number) {
-        const maxPage = Math.max(1, Math.ceil(total / limit));
+        const maxPage = Math.max(1, Math.ceil(total / data.limit));
         if (newPage >= 1 && newPage <= maxPage) {
             page = newPage;
             loadFoods();
@@ -189,15 +207,15 @@
 					<input 
 						type="number" 
 						min="1" 
-						max={Math.max(1, Math.ceil(total / limit))} 
+						max={Math.max(1, Math.ceil(total / data.limit))} 
 						value={page} 
 						onchange={(e) => goToPage(parseInt(e.target.value) || 1)}
 						class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
 					/>
-					<span class="text-sm">sur {Math.max(1, Math.ceil(total / limit))}</span>
+					<span class="text-sm">sur {Math.max(1, Math.ceil(total / data.limit))}</span>
 				</div>
 				
-				<button onclick={nextPage} disabled={page >= Math.max(1, Math.ceil(total / limit))} class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
+				<button onclick={nextPage} disabled={page >= Math.max(1, Math.ceil(total / data.limit))} class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
 					Suivant
 				</button>
 			</div>
@@ -210,11 +228,17 @@
 				: ''} transition-all duration-300"
 		>
 			{#each foods as food (food.id)}
-				<FoodCard {food} selected={selectedFood?.id === food.id} onclick={() => selectFood(food)} />
+				<div animate:flip={{ duration: 300 }}>
+					<FoodCard {food} selected={selectedFood?.id === food.id} onclick={() => selectFood(food)} />
+				</div>
 			{/each}
 		</div>
 	</div>
 
 	<!-- Details Panel -->
-	<FoodDetails food={selectedFood} onclose={closeDetails} />
+	{#if selectedFood}
+		<div class="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out">
+			<FoodDetails food={selectedFood} onclose={closeDetails} />
+		</div>
+	{/if}
 </div>
