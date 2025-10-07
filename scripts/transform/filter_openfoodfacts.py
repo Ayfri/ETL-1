@@ -13,7 +13,6 @@ It is resilient to large files because it uses chunked reading.
 
 from pathlib import Path
 import argparse
-import sys
 import pandas as pd
 
 
@@ -102,6 +101,10 @@ def filter_csv(input_path: Path, output_path: Path, chunksize: int = 50_000):
                     mask = chunk[c] != ''
                 else:
                     mask &= (chunk[c] != '')
+
+            # Skip rows where image_url starts with invalid prefix
+            if 'image_url' in chunk.columns:
+                mask &= ~chunk['image_url'].str.startswith('https://images.openfoodfacts.org/images/products/invalid/')
 
             kept = chunk[mask]
             total_out += len(kept)
