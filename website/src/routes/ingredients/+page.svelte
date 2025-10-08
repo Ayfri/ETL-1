@@ -29,17 +29,37 @@ function closeRecipe() {
 }
 
 function getFirstImageForRecipeLocal(r: any): string {
-    if (!r) return '';
-    // try parsing images field
-    if (r.images) {
-        try {
-            if (typeof r.images === 'string') {
-                const parsed = JSON.parse(r.images);
-                if (Array.isArray(parsed) && parsed.length) return parsed[0];
-            } else if (Array.isArray(r.images) && r.images.length) return r.images[0];
-        } catch {}
+    if (!r) return '/favicon.svg';
+    // Try images field: JSON array, array, comma/newline separated string, or single URL
+    const imgsField = r.images;
+    if (imgsField) {
+        // If it's already an array
+        if (Array.isArray(imgsField) && imgsField.length) return String(imgsField[0]);
+
+        // If it's a string, attempt multiple parses
+        if (typeof imgsField === 'string') {
+            const s = imgsField.trim();
+            if (!s) {
+                // continue to other fallbacks
+            } else {
+                // Try JSON parse
+                try {
+                    const parsed = JSON.parse(s);
+                    if (Array.isArray(parsed) && parsed.length) return String(parsed[0]);
+                } catch (e) {
+                    // not JSON, try comma or newline separated
+                    const parts = s.split(/[,\n]+/).map((p) => p.trim()).filter(Boolean);
+                    if (parts.length) return parts[0];
+                }
+            }
+        }
     }
+
+    // Common fallback fields
     if (typeof r.image_url === 'string' && r.image_url.trim()) return r.image_url.trim();
+    if (typeof r.image === 'string' && r.image.trim()) return r.image.trim();
+    if (typeof r.image_small_url === 'string' && r.image_small_url.trim()) return r.image_small_url.trim();
+
     return '/favicon.svg';
 }
 

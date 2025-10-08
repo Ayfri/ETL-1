@@ -225,7 +225,9 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 				if (Array.isArray(parsed)) return parsed;
 			} catch {
 			}
-			return field.split('\n').map(s => s.trim()).filter(Boolean);
+        // Accept JSON array, newline, comma or pipe-separated lists
+        const parts = field.split(/[,|\n]+/).map(s => s.trim()).filter(Boolean);
+        return parts;
 		}
 		if (Array.isArray(field)) return field;
 		return [];
@@ -390,7 +392,7 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
                                 class="bg-white rounded shadow p-2 flex flex-col items-center gap-2 cursor-pointer transition-shadow duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-300 text-left"
                                 onclick={() => openRecipe(recipe)}
                             >
-                                <img class="w-full h-40 object-cover rounded-lg bg-gray-100" src={formatImagesForDisplay(recipe)} alt={recipe.name} />
+                                <img class="w-full h-40 object-cover rounded-lg bg-gray-100" src={formatImagesForDisplay(recipe) || '/favicon.svg'} alt={recipe.name} />
                                 <div class="w-full">
                                     <div class="text-lg font-semibold text-gray-900">{recipe.name}</div>
                                     {#if recipe.description}
