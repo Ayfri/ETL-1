@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { writable } from 'svelte/store';
-	import RecipeModal from '$lib/components/RecipeModal.svelte';
 	import AddRecipeModal from '$lib/components/AddRecipeModal.svelte';
-	import { ChevronLeft, ChevronRight } from '@lucide/svelte';
+	import RecipeModal from '$lib/components/RecipeModal.svelte';
+	import {ChevronLeft, ChevronRight} from '@lucide/svelte';
+	import {onMount} from 'svelte';
+	import {writable} from 'svelte/store';
 
 	const recipes = writable([] as any[]);
 	const loading = writable(true);
@@ -85,7 +85,8 @@
 			try {
 				const parsed = JSON.parse(field);
 				if (Array.isArray(parsed)) return parsed;
-			} catch {}
+			} catch {
+			}
 			return field.split('\n').map(s => s.trim()).filter(Boolean);
 		}
 		if (Array.isArray(field)) return field;
@@ -123,7 +124,7 @@
 		try {
 			const res = await fetch('/api/recipes', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: {'Content-Type': 'application/json'},
 				body: JSON.stringify(payload)
 			});
 
@@ -167,36 +168,44 @@
 <div class="max-w-4xl mx-auto font-sans p-4">
 	<div class="flex items-center justify-between mb-6">
 		<h1 class="text-2xl font-bold">Recipes</h1>
-		<button class="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:opacity-90" onclick={openAddModal}>Add Recipe</button>
+		<button
+			class="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:opacity-90"
+			onclick={openAddModal}
+		>Add Recipe
+		</button>
 	</div>
 
 
-    {#if totalPages > 1}
-        <div class="flex items-center justify-center gap-4 bg-white/80 backdrop-blur-sm rounded-lg px-6 py-3 shadow-sm mt-6">
-            <button onclick={prevPage} disabled={currentPage <= 1}
-                    class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
-                <ChevronLeft size={16}/>
-            </button>
+	{#if totalPages > 1}
+		<div class="flex items-center justify-center gap-4 bg-white/80 backdrop-blur-sm rounded-lg px-6 py-3 shadow-sm mt-6">
+			<button
+				onclick={prevPage} disabled={currentPage <= 1}
+				class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors"
+			>
+				<ChevronLeft size={16}/>
+			</button>
 
-            <div class="flex items-center gap-2">
-                <span class="text-sm font-medium">Page</span>
-                <input
-                        type="number"
-                        min="1"
-                        max={Math.max(1, Math.ceil(totalRecipes / limit))}
-                        value={currentPage}
-                        onchange={(e) => goToPage(parseInt(e.target.value) || 1)}
-                        class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
-                />
-                <span class="text-sm">of {Math.max(1, Math.ceil(totalRecipes / limit))}</span>
-            </div>
+			<div class="flex items-center gap-2">
+				<span class="text-sm font-medium">Page</span>
+				<input
+					type="number"
+					min="1"
+					max={Math.max(1, Math.ceil(totalRecipes / limit))}
+					value={currentPage}
+					onchange={(e) => goToPage(parseInt(e.target.value) || 1)}
+					class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
+				/>
+				<span class="text-sm">of {Math.max(1, Math.ceil(totalRecipes / limit))}</span>
+			</div>
 
-            <button onclick={nextPage} disabled={currentPage >= Math.max(1, Math.ceil(totalRecipes / limit))}
-                    class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
-                <ChevronRight size={16}/>
-            </button>
-        </div>
-    {/if}
+			<button
+				onclick={nextPage} disabled={currentPage >= Math.max(1, Math.ceil(totalRecipes / limit))}
+				class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors"
+			>
+				<ChevronRight size={16}/>
+			</button>
+		</div>
+	{/if}
 
 	<div class="space-y-6">
 		<section>
@@ -213,17 +222,31 @@
 					{:else}
 						<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
 							{#each $recipes as recipe}
-								<article class="flex flex-col gap-2 p-3 rounded-xl border border-gray-100 hover:shadow-md transition-shadow">
-									<button class="w-full text-left p-0 hover:transform hover:-translate-y-1 transition-transform" onclick={() => openRecipe(recipe)} aria-label={`Open ${recipe.name}`}>
-										<img class="w-full h-40 object-cover rounded-lg bg-gray-100" src={formatImagesForDisplay(recipe)} alt={recipe.name} />
+								<article
+									class="flex flex-col gap-2 p-3 rounded-xl border border-gray-100 hover:shadow-md transition-shadow"
+								>
+									<button
+										class="w-full text-left p-0 hover:transform hover:-translate-y-1 transition-transform"
+										onclick={() => openRecipe(recipe)} aria-label={`Open ${recipe.name}`}
+									>
+										<img
+											class="w-full h-40 object-cover rounded-lg bg-gray-100" src={formatImagesForDisplay(recipe)}
+											alt={recipe.name}
+										/>
 										<div class="flex justify-between items-center w-full mt-2">
 											<div class="flex-1">
 												<strong class="text-lg block">{recipe.name}</strong>
 												<div class="text-gray-600 text-sm mt-1">{recipe.description}</div>
 												<div class="flex gap-2 mt-2">
-													{#if recipe.prep_time}<span class="bg-gray-100 px-2 py-1 rounded text-xs">Prep: {recipe.prep_time}</span>{/if}
-													{#if recipe.cook_time}<span class="bg-gray-100 px-2 py-1 rounded text-xs">Cook: {recipe.cook_time}</span>{/if}
-													{#if recipe.total_time}<span class="bg-gray-100 px-2 py-1 rounded text-xs">Total: {recipe.total_time}</span>{/if}
+													{#if recipe.prep_time}<span
+														class="bg-gray-100 px-2 py-1 rounded text-xs"
+													>Prep: {recipe.prep_time}</span>{/if}
+													{#if recipe.cook_time}<span
+														class="bg-gray-100 px-2 py-1 rounded text-xs"
+													>Cook: {recipe.cook_time}</span>{/if}
+													{#if recipe.total_time}<span
+														class="bg-gray-100 px-2 py-1 rounded text-xs"
+													>Total: {recipe.total_time}</span>{/if}
 												</div>
 											</div>
 										</div>
@@ -240,6 +263,6 @@
 			</div>
 		</section>
 	</div>
-	<RecipeModal open={modalOpen} recipe={selectedRecipe} on:close={closeModal} />
-	<AddRecipeModal open={addModalOpen} on:close={closeAddModal} on:created={async (e) => { await loadRecipes(); closeAddModal(); }} />
+	<RecipeModal open={modalOpen} recipe={selectedRecipe} on:close={closeModal}/>
+	<AddRecipeModal open={addModalOpen} on:close={closeAddModal} on:created={async (e) => { await loadRecipes(); closeAddModal(); }}/>
 </div>
