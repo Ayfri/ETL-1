@@ -13,6 +13,7 @@ wheels/
 # Downloaded CSV files
 *.csv
 *.csv.gz
+*.db
 
 # Virtual environments
 .venv
