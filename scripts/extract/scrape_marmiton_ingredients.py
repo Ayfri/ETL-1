@@ -5,8 +5,6 @@ Scrapes ingredients from listing pages, then extracts all recipes that use each 
 Optimized version with asyncio and multiprocessing for maximum speed.
 """
 
-from __future__ import annotations
-
 import asyncio
 import csv
 import json
@@ -35,10 +33,10 @@ MAX_WORKERS = min(mp.cpu_count() * 2, 8)  # Number of worker processes
 def parse_ingredient(ingredient_text: str) -> dict[str, str]:
     """
     Parse an ingredient to extract quantity, unit and name.
-    
+
     Args:
         ingredient_text: Raw ingredient text
-        
+
     Returns:
         Dict with 'quantity', 'unit', 'name', 'raw'
     """
@@ -48,9 +46,9 @@ def parse_ingredient(ingredient_text: str) -> dict[str, str]:
         'name': ingredient_text.strip(),
         'raw': ingredient_text.strip()
     }
-    
+
     text = ingredient_text.strip()
-    
+
     # Pattern 1: Quantity + metric unit + de/d' + name (350 g de thon)
     match = re.match(r'^(\d+(?:[.,]\d+)?)\s*([a-zA-Zéèàç]+)\s+(?:de|d\')\s+(.+)$', text, re.IGNORECASE)
     if match:
@@ -58,7 +56,7 @@ def parse_ingredient(ingredient_text: str) -> dict[str, str]:
         result['unit'] = match.group(2).strip()
         result['name'] = match.group(3).strip()
         return result
-    
+
     # Pattern 2: Quantity + cooking unit + de/d' + name (2 cuillères à soupe de sauce)
     match = re.match(
         r'^(\d+(?:[.,]\d+)?)\s+(cuillères?(?:\s+à\s+(?:soupe|café|thé))?|verres?|sachets?|boîtes?|bocaux?|tranches?|gousses?|branches?|feuilles?|pincées?|poignées?|cubes?|noix)\s+(?:de|d\')\s+(.+)$',
@@ -69,7 +67,7 @@ def parse_ingredient(ingredient_text: str) -> dict[str, str]:
         result['unit'] = match.group(2).strip()
         result['name'] = match.group(3).strip()
         return result
-    
+
     # Pattern 3: Fraction + unit + de/d' + name (1/2 verre de lait)
     match = re.match(
         r'^(\d+/\d+)\s+(cuillères?(?:\s+à\s+(?:soupe|café|thé))?|verres?|sachets?|boîtes?|bocaux?|tranches?|gousses?|branches?|feuilles?|pincées?|poignées?|cubes?|noix)\s+(?:de|d\')\s+(.+)$',
@@ -80,7 +78,7 @@ def parse_ingredient(ingredient_text: str) -> dict[str, str]:
         result['unit'] = match.group(2).strip()
         result['name'] = match.group(3).strip()
         return result
-    
+
     # Pattern 4: Quantity + metric unit without "de" (50 cl d'eau)
     match = re.match(r'^(\d+(?:[.,]\d+)?)\s*([a-zA-Zéèàç]+)\s+d\'(.+)$', text, re.IGNORECASE)
     if match:
@@ -88,21 +86,21 @@ def parse_ingredient(ingredient_text: str) -> dict[str, str]:
         result['unit'] = match.group(2).strip()
         result['name'] = match.group(3).strip()
         return result
-    
+
     # Pattern 5: Quantity + simple name (2 oeufs, 1 pâte brisée)
     match = re.match(r'^(\d+(?:[.,]\d+)?)\s+(.+)$', text)
     if match:
         result['quantity'] = match.group(1).replace(',', '.')
         result['name'] = match.group(2).strip()
         return result
-    
+
     # Pattern 6: Fraction + name (1/2 chou-fleur)
     match = re.match(r'^(\d+/\d+)\s+(.+)$', text)
     if match:
         result['quantity'] = match.group(1)
         result['name'] = match.group(2).strip()
         return result
-    
+
     return result
 
 
@@ -565,7 +563,7 @@ async def scrape_all_letters_async(max_recipes_per_ingredient: int = 100) -> lis
     OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     if OUTPUT_CSV.exists():
         OUTPUT_CSV.unlink()  # Remove existing file to start fresh
-    
+
     # Create file with header
     with OUTPUT_CSV.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.writer(fh)
@@ -635,14 +633,14 @@ def save_to_csv(items: list[tuple[str, str, list[dict[str, Any]]]], output: Path
         append: If True, append to existing file. If False, overwrite.
     """
     output.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Determine if we need to write header (new file or overwrite mode)
     write_header = not append or not output.exists()
     mode = "a" if append else "w"
-    
+
     with output.open(mode, encoding="utf-8", newline="") as fh:
         writer = csv.writer(fh)
-        
+
         # Write header row only if needed
         if write_header:
             writer.writerow([
