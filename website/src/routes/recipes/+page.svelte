@@ -1,10 +1,10 @@
 <script lang="ts">
 	import AddRecipeModal from '$lib/components/AddRecipeModal.svelte';
 	import RecipeModal from '$lib/components/RecipeModal.svelte';
-	import {ChevronLeft, ChevronRight, ArrowUp, ArrowDown, BookOpen, Filter, ArrowUpDown} from '@lucide/svelte';
+	import type {Recipe} from '$lib/db';
+	import {ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Filter} from '@lucide/svelte';
 	import {onMount} from 'svelte';
 	import {writable} from 'svelte/store';
-	import type { Recipe } from '$lib/db';
 
 import { fly } from 'svelte/transition';
 import { flip } from 'svelte/animate';
@@ -33,13 +33,13 @@ const loading = writable(true);
 	let sortOrder = $state<'asc' | 'desc'>('asc');
 
 	const sortOptions = [
-		{ value: 'name', label: 'Nom' },
-		{ value: 'prep_time', label: 'Temps de préparation' },
-		{ value: 'cook_time', label: 'Temps de cuisson' },
-		{ value: 'total_time', label: 'Temps total' },
-		{ value: 'rate', label: 'Note' },
-		{ value: 'nb_comments', label: 'Commentaires' },
-		{ value: 'created_at', label: 'Date de création' }
+		{value: 'name', label: 'Nom'},
+		{value: 'prep_time', label: 'Temps de préparation'},
+		{value: 'cook_time', label: 'Temps de cuisson'},
+		{value: 'total_time', label: 'Temps total'},
+		{value: 'rate', label: 'Note'},
+		{value: 'nb_comments', label: 'Commentaires'},
+		{value: 'created_at', label: 'Date de création'}
 	];
 
 let loadTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -236,6 +236,20 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 		return imgs.length ? imgs[0] : '';
 	}
 
+	function formatDuration(duration: string): string {
+		if (!duration) return '';
+		const match = duration.match(/(\d+)m/);
+		if (!match) return duration;
+		const minutes = parseInt(match[1]);
+		const hours = Math.floor(minutes / 60);
+		const mins = minutes % 60;
+		if (hours > 0) {
+			return `${hours}h${mins}m`;
+		} else {
+			return `${mins}m`;
+		}
+	}
+
 	onMount(loadRecipes);
 </script>
 
@@ -265,7 +279,7 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 		<!-- Filters -->
 		<div>
 			<div class="flex items-center gap-2 mb-4">
-				<Filter size={20} class="text-gray-600" />
+				<Filter size={20} class="text-gray-600"/>
 				<h2 class="text-xl font-semibold text-gray-800">Filtres</h2>
 			</div>
 			<div class="flex flex-wrap gap-2">
@@ -297,7 +311,7 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 			<!-- Sort Controls -->
 			<div class="flex items-center gap-4">
 				<div class="flex items-center gap-2">
-					<ArrowUpDown size={16} class="text-gray-600" />
+					<ArrowUpDown size={16} class="text-gray-600"/>
 					<span class="text-sm font-medium text-gray-700">Trier par:</span>
 				</div>
 				<div class="flex gap-2">
@@ -311,9 +325,9 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 							<span>{option.label}</span>
 							{#if sortBy === option.value}
 								{#if sortOrder === 'asc'}
-									<ArrowUp size={14} />
+									<ArrowUp size={14}/>
 								{:else}
-									<ArrowDown size={14} />
+									<ArrowDown size={14}/>
 								{/if}
 							{/if}
 						</button>
