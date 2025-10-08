@@ -3,6 +3,7 @@
     import { fly } from 'svelte/transition';
     import RecipeModal from '$lib/components/RecipeModal.svelte';
     import { Search } from '@lucide/svelte';
+    import ScrollArea from '$lib/components/ScrollArea.svelte';
 
     let ingredients = [] as any[];
     let loadError: string | null = null;
@@ -187,7 +188,7 @@ function onQueryInput(e: Event) {
     {/if}
 
         <div class="relative">
-            <div class="fixed inset-y-0 right-0 z-50 w-80 bg-white shadow-2xl p-4 overflow-auto transition-all duration-500 ease-in-out {showRecipesMenu ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}" aria-hidden={!showRecipesMenu}>
+            <div class="fixed inset-y-0 right-0 z-50 w-80 bg-white shadow-2xl p-4 transition-all duration-500 ease-in-out {showRecipesMenu ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}" aria-hidden={!showRecipesMenu}>
                 <div class="flex items-center justify-between mb-3">
                     <h3 class="font-bold">Recettes: {selectedIngredient}</h3>
                     <button class="px-2 py-1 text-gray-600" on:click={closeRecipesMenu} aria-label="Fermer">✕</button>
@@ -200,16 +201,18 @@ function onQueryInput(e: Event) {
                 {:else if recipes.length === 0}
                     <div>Aucune recette trouvée.</div>
                 {:else}
-                    <ul class="space-y-2">
-                        {#each recipes as r}
-                            <li>
-                                <button type="button" class="flex items-center gap-2 p-2 rounded hover:bg-gray-100 cursor-pointer w-full text-left" on:click={() => { selectedRecipe = r; showRecipeModal = true; }}>
-                                    <img src={getFirstImageForRecipeLocal(r)} alt={r.name} class="w-12 h-12 object-cover rounded" />
-                                    <div class="text-sm">{r.name}</div>
-                                </button>
-                            </li>
-                        {/each}
-                    </ul>
+                    <ScrollArea className="max-h-[calc(100vh-6rem)]" ariaLabel={`Recettes pour ${selectedIngredient}`}>
+                        <ul class="space-y-2 p-1">
+                            {#each recipes as r}
+                                <li>
+                                    <button type="button" class="flex items-center gap-2 p-2 rounded hover:bg-gray-100 cursor-pointer w-full text-left" on:click={() => { selectedRecipe = r; showRecipeModal = true; }}>
+                                        <img src={getFirstImageForRecipeLocal(r)} alt={r.name} class="w-12 h-12 object-cover rounded" />
+                                        <div class="text-sm">{r.name}</div>
+                                    </button>
+                                </li>
+                            {/each}
+                        </ul>
+                    </ScrollArea>
                 {/if}
             </div>
 
