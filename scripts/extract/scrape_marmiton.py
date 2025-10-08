@@ -1,10 +1,12 @@
 """
-Scraper de recettes Marmiton optimisé.
+Marmiton recipe scraper.
 
-Utilise recipe-scrapers pour extraire les recettes de Marmiton.org.
+Extracts recipes from Marmiton.org with structured ingredient parsing.
 """
 
 import csv
+import json
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,8 +16,81 @@ from urllib.parse import quote
 
 import requests
 from bs4 import BeautifulSoup
-from recipe_scrapers import scrape_me
 from tqdm import tqdm
+
+
+def parse_ingredient(ingredient_text: str) -> dict[str, str]:
+    """
+    Parse an ingredient to extract quantity, unit and name.
+    
+    Args:
+        ingredient_text: Raw ingredient text
+        
+    Returns:
+        Dict with 'quantity', 'unit', 'name', 'raw'
+    """
+    result = {
+        'quantity': '',
+        'unit': '',
+        'name': ingredient_text.strip(),
+        'raw': ingredient_text.strip()
+    }
+    
+    text = ingredient_text.strip()
+    
+    # Pattern 1: Quantity + metric unit + de/d' + name (350 g de thon)
+    match = re.match(r'^(\d+(?:[.,]\d+)?)\s*([a-zA-Zéèàç]+)\s+(?:de|d\')\s+(.+)$', text, re.IGNORECASE)
+    if match:
+        result['quantity'] = match.group(1).replace(',', '.')
+        result['unit'] = match.group(2).strip()
+        result['name'] = match.group(3).strip()
+        return result
+    
+    # Pattern 2: Quantity + cooking unit + de/d' + name (2 cuillères à soupe de sauce)
+    match = re.match(
+        r'^(\d+(?:[.,]\d+)?)\s+(cuillères?(?:\s+à\s+(?:soupe|café|thé))?|verres?|sachets?|boîtes?|bocaux?|tranches?|gousses?|branches?|feuilles?|pincées?|poignées?|cubes?|noix)\s+(?:de|d\')\s+(.+)$',
+        text, re.IGNORECASE
+    )
+    if match:
+        result['quantity'] = match.group(1).replace(',', '.')
+        result['unit'] = match.group(2).strip()
+        result['name'] = match.group(3).strip()
+        return result
+    
+    # Pattern 3: Fraction + unit + de/d' + name (1/2 verre de lait)
+    match = re.match(
+        r'^(\d+/\d+)\s+(cuillères?(?:\s+à\s+(?:soupe|café|thé))?|verres?|sachets?|boîtes?|bocaux?|tranches?|gousses?|branches?|feuilles?|pincées?|poignées?|cubes?|noix)\s+(?:de|d\')\s+(.+)$',
+        text, re.IGNORECASE
+    )
+    if match:
+        result['quantity'] = match.group(1)
+        result['unit'] = match.group(2).strip()
+        result['name'] = match.group(3).strip()
+        return result
+    
+    # Pattern 4: Quantity + metric unit without "de" (50 cl d'eau)
+    match = re.match(r'^(\d+(?:[.,]\d+)?)\s*([a-zA-Zéèàç]+)\s+d\'(.+)$', text, re.IGNORECASE)
+    if match:
+        result['quantity'] = match.group(1).replace(',', '.')
+        result['unit'] = match.group(2).strip()
+        result['name'] = match.group(3).strip()
+        return result
+    
+    # Pattern 5: Quantity + simple name (2 oeufs, 1 pâte brisée)
+    match = re.match(r'^(\d+(?:[.,]\d+)?)\s+(.+)$', text)
+    if match:
+        result['quantity'] = match.group(1).replace(',', '.')
+        result['name'] = match.group(2).strip()
+        return result
+    
+    # Pattern 6: Fraction + name (1/2 chou-fleur)
+    match = re.match(r'^(\d+/\d+)\s+(.+)$', text)
+    if match:
+        result['quantity'] = match.group(1)
+        result['name'] = match.group(2).strip()
+        return result
+    
+    return result
 
 
 def get_marmiton_urls_from_page(url: str, max_results: int = 50) -> list[str]:
@@ -78,18 +153,25 @@ def search_marmiton_urls(query: str, max_results: int = 30) -> list[str]:
     return get_marmiton_urls_from_page(search_url, max_results)
 
 
-def extract_recipe_with_scrapers(url: str) -> dict[str, Any] | None:
+def extract_recipe_details(url: str) -> dict[str, Any] | None:
     """
-    Extrait les détails d'une recette avec recipe-scrapers.
+    Extract all recipe details from HTML.
     
     Args:
-        url: URL de la recette
+        url: Recipe URL
         
     Returns:
-        Dictionnaire avec les détails ou None si échec
+        Dictionary with recipe details or None if extraction fails
     """
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+    
     try:
-        scraper = scrape_me(url)
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
         
         recipe = {
             'url': url,
@@ -102,68 +184,116 @@ def extract_recipe_with_scrapers(url: str) -> dict[str, Any] | None:
             'cook_time': '',
             'total_time': '',
             'recipe_quantity': '',
-            'ingredients': '',
+            'ingredients_raw': '',
+            'ingredients_json': '',
             'steps': '',
             'images': '',
-            'author_tip': '',
+            'tags': '',
         }
         
-        try:
-            recipe['name'] = scraper.title() or ''
-        except:
-            pass
+        # Title
+        title = soup.find('h1', class_='main-title')
+        if title:
+            recipe['name'] = title.get_text(strip=True)
         
-        try:
-            recipe['total_time'] = str(scraper.total_time()) if scraper.total_time() else ''
-        except:
-            pass
+        # Rating
+        rating_div = soup.find('div', class_='recipe-header__rating')
+        if rating_div:
+            rating_span = rating_div.find('span', class_='rating')
+            if rating_span:
+                rating_text = rating_span.get_text(strip=True)
+                match = re.search(r'(\d+(?:[.,]\d+)?)', rating_text)
+                if match:
+                    recipe['rate'] = match.group(1).replace(',', '.')
         
-        try:
-            recipe['cook_time'] = str(scraper.cook_time()) if scraper.cook_time() else ''
-        except:
-            pass
+        # Number of comments
+        comments = soup.find('a', class_='recipe-header__comments')
+        if comments:
+            comments_text = comments.get_text(strip=True)
+            match = re.search(r'(\d+)', comments_text)
+            if match:
+                recipe['nb_comments'] = match.group(1)
         
-        try:
-            yields = scraper.yields()
-            recipe['recipe_quantity'] = yields if yields else ''
-        except:
-            pass
+        # Metadata (difficulty, budget, times)
+        recipe_infos = soup.find_all('div', class_='recipe-infos__item')
+        for info in recipe_infos:
+            label_elem = info.find('span', class_='recipe-infos__item-label')
+            value_elem = info.find('span', class_='recipe-infos__item-value')
+            
+            if label_elem and value_elem:
+                label = label_elem.get_text(strip=True).lower()
+                value = value_elem.get_text(strip=True)
+                
+                if 'difficulté' in label or 'niveau' in label:
+                    recipe['difficulty'] = value
+                elif 'coût' in label or 'budget' in label or 'prix' in label:
+                    recipe['budget'] = value
+                elif 'préparation' in label or 'prep' in label:
+                    recipe['prep_time'] = value
+                elif 'cuisson' in label or 'cook' in label:
+                    recipe['cook_time'] = value
+                elif 'total' in label or 'temps total' in label:
+                    recipe['total_time'] = value
         
-        try:
-            ingredients = scraper.ingredients()
-            recipe['ingredients'] = ' | '.join(ingredients) if ingredients else ''
-        except:
-            pass
+        # Servings
+        servings = soup.find('span', class_='recipe-infos__quantity')
+        if servings:
+            recipe['recipe_quantity'] = servings.get_text(strip=True)
         
-        try:
-            instructions = scraper.instructions()
-            if instructions:
-                steps = [s.strip() for s in instructions.split('\n') if s.strip()]
-                numbered_steps = [f"{i}. {step}" for i, step in enumerate(steps, 1)]
-                recipe['steps'] = ' | '.join(numbered_steps)
-        except:
-            pass
+        # Ingredients
+        ingredients_raw = []
+        ingredients_structured = []
         
-        try:
-            image = scraper.image()
-            recipe['images'] = image if image else ''
-        except:
-            pass
+        ingredients_section = soup.find('div', class_='recipe-ingredients')
+        if ingredients_section:
+            ingredient_items = ingredients_section.find_all('li', class_='recipe-ingredients__list-item')
+            for item in ingredient_items:
+                ingredient_text = item.get_text(' ', strip=True)
+                ingredients_raw.append(ingredient_text)
+                
+                # Parse ingredient
+                parsed = parse_ingredient(ingredient_text)
+                ingredients_structured.append(parsed)
         
-        try:
-            rating = scraper.ratings()
-            recipe['rate'] = str(rating) if rating else ''
-        except:
-            pass
+        if ingredients_raw:
+            recipe['ingredients_raw'] = ' | '.join(ingredients_raw)
+            recipe['ingredients_json'] = json.dumps(ingredients_structured, ensure_ascii=False)
         
-        try:
-            author = scraper.author()
-            if author:
-                recipe['author_tip'] = author
-        except:
-            pass
+        # Steps
+        steps = []
+        steps_section = soup.find('div', class_='recipe-steps')
+        if steps_section:
+            step_items = steps_section.find_all('li', class_='recipe-steps__list-item')
+            for i, step in enumerate(step_items, 1):
+                step_text = step.get_text(' ', strip=True)
+                if step_text:
+                    steps.append(f"{i}. {step_text}")
         
-        if recipe['name'] and (recipe['ingredients'] or recipe['steps']):
+        if steps:
+            recipe['steps'] = ' | '.join(steps)
+        
+        # Main image
+        img = soup.find('img', class_='recipe-media__image')
+        if img and img.get('src'):
+            recipe['images'] = img['src']
+        elif img and img.get('data-src'):
+            recipe['images'] = img['data-src']
+        
+        # Tags/categories
+        tags = []
+        tags_section = soup.find('div', class_='recipe-tags')
+        if tags_section:
+            tag_links = tags_section.find_all('a')
+            for tag in tag_links:
+                tag_text = tag.get_text(strip=True)
+                if tag_text:
+                    tags.append(tag_text)
+        
+        if tags:
+            recipe['tags'] = ' | '.join(tags)
+        
+        # Verify we have minimum data
+        if recipe['name'] and (recipe['ingredients_raw'] or recipe['steps']):
             return recipe
         else:
             return None
@@ -181,36 +311,37 @@ def scrape_marmiton_to_csv(
     max_workers: int = 5
 ) -> None:
     """
-    Scrape des recettes Marmiton et sauvegarde en CSV.
+    Scrape Marmiton recipes and save to CSV.
     
     Args:
-        queries: Liste de mots-clés de recherche
-        output_file: Chemin du fichier CSV de sortie
-        max_results_per_query: Nombre max de recettes par recherche
-        append: Si True, ajoute au fichier existant
-        delay: Délai entre les requêtes en secondes
-        max_workers: Nombre de threads parallèles
+        queries: List of search keywords
+        output_file: Output CSV file path
+        max_results_per_query: Max recipes per search
+        append: If True, append to existing file
+        delay: Delay between requests in seconds
+        max_workers: Number of parallel threads
     """
     output_path = Path(output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     print("="*60)
-    print("Collecte des URLs de recettes")
+    print("Collecting recipe URLs")
     print("="*60)
     
     all_urls = []
     seen_urls = set()
     
-    # Ajouter des pages de catégories populaires
+    # Popular categories
     category_urls = [
         "https://www.marmiton.org/recettes/top-recettes.aspx",
         "https://www.marmiton.org/recettes/recettes-rapides.aspx",
         "https://www.marmiton.org/recettes/index/categorie/entree",
         "https://www.marmiton.org/recettes/index/categorie/plat-principal",
         "https://www.marmiton.org/recettes/index/categorie/dessert",
+        "https://www.marmiton.org/recettes/index/categorie/accompagnement",
     ]
     
-    print("Récupération depuis les catégories populaires...")
+    print("Fetching from popular categories...")
     for cat_url in category_urls:
         urls = get_marmiton_urls_from_page(cat_url, 50)
         for url in urls:
@@ -219,51 +350,39 @@ def scrape_marmiton_to_csv(
                 all_urls.append(url)
         time.sleep(delay)
     
-    print(f"  {len(all_urls)} recettes depuis les catégories")
+    print(f"  {len(all_urls)} recipes from categories\n")
     
-    # Puis recherches par mots-clés
-    for query in queries:
-        print(f"Recherche: '{query}'...", end=' ')
-        urls = search_marmiton_urls(query, max_results_per_query)
-        
-        new_urls = 0
-        for url in urls:
-            if url not in seen_urls:
-                seen_urls.add(url)
-                all_urls.append(url)
-                new_urls += 1
-        
-        if new_urls > 0:
-            print(f"{new_urls} nouvelles")
-        else:
-            print("0 nouvelles")
-        time.sleep(delay)
+    # Print the URLs
+    print("Popular recipe URLs:")
+    for i, url in enumerate(all_urls[:20], 1):  # Show first 20
+        print(f"  {i}. {url}")
+    if len(all_urls) > 20:
+        print(f"  ... and {len(all_urls) - 20} more")
     
     if not all_urls:
-        print("\n❌ Aucune URL trouvée!")
+        print("\n❌ No URLs found!")
         return
     
-    print(f"\n✓ Total: {len(all_urls)} recettes uniques")
-    
     print(f"\n{'='*60}")
-    print("Extraction des détails")
+    print("Extracting details")
     print("="*60)
     
     fieldnames = [
-        'author_tip',
-        'budget',
-        'cook_time',
-        'difficulty',
-        'images',
-        'ingredients',
         'name',
-        'nb_comments',
-        'prep_time',
-        'rate',
-        'recipe_quantity',
-        'steps',
-        'total_time',
         'url',
+        'rate',
+        'nb_comments',
+        'difficulty',
+        'budget',
+        'prep_time',
+        'cook_time',
+        'total_time',
+        'recipe_quantity',
+        'ingredients_raw',
+        'ingredients_json',
+        'steps',
+        'images',
+        'tags',
     ]
     
     mode = 'a' if append else 'w'
@@ -277,61 +396,58 @@ def scrape_marmiton_to_csv(
         if not file_exists:
             writer.writeheader()
         
-        # Extraction parallèle pour accélérer
+        # Parallel extraction
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(extract_recipe_with_scrapers, url): url for url in all_urls}
+            futures = {executor.submit(extract_recipe_details, url): url for url in all_urls}
             
-            with tqdm(total=len(all_urls), desc="Extraction") as pbar:
+            with tqdm(total=len(all_urls), desc="Extracting", unit="recipe") as pbar:
                 for future in as_completed(futures):
                     recipe = future.result()
                     if recipe:
                         writer.writerow(recipe)
+                        csvfile.flush()  # Save progressively
                         recipes_written += 1
                     pbar.update(1)
-                    time.sleep(delay / max_workers)  # Délai réduit car parallèle
+                    time.sleep(delay / max_workers)
     
-    action = "ajoutées" if append else "écrites"
-    print(f"\n✓ {recipes_written} recettes {action} dans {output_file}")
+    action = "added" if append else "written"
+    print(f"\n✓ {recipes_written}/{len(all_urls)} recipes {action} to {output_file}")
+    
+    failed = len(all_urls) - recipes_written
+    if failed > 0:
+        print(f"⚠️  {failed} recipes could not be extracted")
 
 
 def main():
-    """Point d'entrée principal."""
-    queries = [
-        # Sélection réduite mais variée
-        "poulet roti", "boeuf bourguignon", "blanquette de veau",
-        "saumon grillé", "moules marinières", "sole meunière",
-    ]
-    
+    """Main entry point."""
     output_file = "data/raw/marmiton_recipes.csv"
-    max_results_per_query = 20
     
     print("="*60)
-    print("Scraper Marmiton - Version Optimisée")
+    print("Marmiton Scraper")
     print("="*60)
-    print(f"Recherches: {len(queries)} mots-clés")
-    print(f"Max par recherche: {max_results_per_query}")
-    print(f"Fichier: {output_file}")
+    print(f"Source: Popular categories only")
+    print(f"Output: {output_file}")
     print("="*60)
     
     try:
         scrape_marmiton_to_csv(
-            queries,
+            [],  # No keyword searches
             output_file,
-            max_results_per_query=max_results_per_query,
+            max_results_per_query=0,
             append=False,
-            delay=0.6,
-            max_workers=8
+            delay=0.5,
+            max_workers=6
         )
         
         print(f"\n{'='*60}")
-        print("✓ Extraction terminée!")
+        print("✓ Extraction complete!")
         print("="*60)
         
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrompu par l'utilisateur.")
+        print("\n\n⚠️  Interrupted by user.")
         sys.exit(1)
     except Exception as e:
-        print(f"\n\n❌ Erreur: {e}")
+        print(f"\n\n❌ Error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
