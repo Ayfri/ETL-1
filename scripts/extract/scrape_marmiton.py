@@ -155,7 +155,7 @@ def search_marmiton_urls(query: str, max_results: int = 30) -> list[str]:
 
 def extract_recipe_details(url: str) -> dict[str, Any] | None:
     """
-    Extract all recipe details from HTML.
+    Extract all recipe details from HTML using JSON-LD structured data.
     
     Args:
         url: Recipe URL
@@ -191,106 +191,120 @@ def extract_recipe_details(url: str) -> dict[str, Any] | None:
             'tags': '',
         }
         
-        # Title
-        title = soup.find('h1', class_='main-title')
-        if title:
-            recipe['name'] = title.get_text(strip=True)
+        # Try to extract from JSON-LD structured data
+        json_ld_scripts = soup.find_all('script', type='application/ld+json')
+        recipe_data = None
         
-        # Rating
-        rating_div = soup.find('div', class_='recipe-header__rating')
-        if rating_div:
-            rating_span = rating_div.find('span', class_='rating')
-            if rating_span:
-                rating_text = rating_span.get_text(strip=True)
-                match = re.search(r'(\d+(?:[.,]\d+)?)', rating_text)
-                if match:
-                    recipe['rate'] = match.group(1).replace(',', '.')
+        for script in json_ld_scripts:
+            try:
+                data = json.loads(script.string)
+                if isinstance(data, dict) and data.get('@type') == 'Recipe':
+                    recipe_data = data
+                    break
+            except:
+                continue
         
-        # Number of comments
-        comments = soup.find('a', class_='recipe-header__comments')
-        if comments:
-            comments_text = comments.get_text(strip=True)
-            match = re.search(r'(\d+)', comments_text)
-            if match:
-                recipe['nb_comments'] = match.group(1)
-        
-        # Metadata (difficulty, budget, times)
-        recipe_infos = soup.find_all('div', class_='recipe-infos__item')
-        for info in recipe_infos:
-            label_elem = info.find('span', class_='recipe-infos__item-label')
-            value_elem = info.find('span', class_='recipe-infos__item-value')
+        if recipe_data:
+            # Extract from JSON-LD
+            recipe['name'] = recipe_data.get('name', '')
             
-            if label_elem and value_elem:
-                label = label_elem.get_text(strip=True).lower()
-                value = value_elem.get_text(strip=True)
-                
-                if 'difficulté' in label or 'niveau' in label:
-                    recipe['difficulty'] = value
-                elif 'coût' in label or 'budget' in label or 'prix' in label:
-                    recipe['budget'] = value
-                elif 'préparation' in label or 'prep' in label:
-                    recipe['prep_time'] = value
-                elif 'cuisson' in label or 'cook' in label:
-                    recipe['cook_time'] = value
-                elif 'total' in label or 'temps total' in label:
-                    recipe['total_time'] = value
-        
-        # Servings
-        servings = soup.find('span', class_='recipe-infos__quantity')
-        if servings:
-            recipe['recipe_quantity'] = servings.get_text(strip=True)
-        
-        # Ingredients
-        ingredients_raw = []
-        ingredients_structured = []
-        
-        ingredients_section = soup.find('div', class_='recipe-ingredients')
-        if ingredients_section:
-            ingredient_items = ingredients_section.find_all('li', class_='recipe-ingredients__list-item')
-            for item in ingredient_items:
-                ingredient_text = item.get_text(' ', strip=True)
-                ingredients_raw.append(ingredient_text)
-                
-                # Parse ingredient
-                parsed = parse_ingredient(ingredient_text)
-                ingredients_structured.append(parsed)
-        
-        if ingredients_raw:
-            recipe['ingredients_raw'] = ' | '.join(ingredients_raw)
-            recipe['ingredients_json'] = json.dumps(ingredients_structured, ensure_ascii=False)
-        
-        # Steps
-        steps = []
-        steps_section = soup.find('div', class_='recipe-steps')
-        if steps_section:
-            step_items = steps_section.find_all('li', class_='recipe-steps__list-item')
-            for i, step in enumerate(step_items, 1):
-                step_text = step.get_text(' ', strip=True)
+            # Rating
+            if 'aggregateRating' in recipe_data:
+                rating = recipe_data['aggregateRating']
+                recipe['rate'] = str(rating.get('ratingValue', ''))
+                recipe['nb_comments'] = str(rating.get('ratingCount', ''))
+            
+            # Times
+            prep_time = recipe_data.get('prepTime', '')
+            if prep_time:
+                # Convert ISO 8601 duration to readable format
+                match = re.search(r'PT(?:(\d+)H)?(?:(\d+)M)?', prep_time)
+                if match:
+                    hours, mins = match.groups()
+                    parts = []
+                    if hours:
+                        parts.append(f"{hours}h")
+                    if mins:
+                        parts.append(f"{mins}min")
+                    recipe['prep_time'] = ' '.join(parts) if parts else prep_time
+            
+            cook_time = recipe_data.get('cookTime', '')
+            if cook_time:
+                match = re.search(r'PT(?:(\d+)H)?(?:(\d+)M)?', cook_time)
+                if match:
+                    hours, mins = match.groups()
+                    parts = []
+                    if hours:
+                        parts.append(f"{hours}h")
+                    if mins:
+                        parts.append(f"{mins}min")
+                    recipe['cook_time'] = ' '.join(parts) if parts else cook_time
+            
+            total_time = recipe_data.get('totalTime', '')
+            if total_time:
+                match = re.search(r'PT(?:(\d+)H)?(?:(\d+)M)?', total_time)
+                if match:
+                    hours, mins = match.groups()
+                    parts = []
+                    if hours:
+                        parts.append(f"{hours}h")
+                    if mins:
+                        parts.append(f"{mins}min")
+                    recipe['total_time'] = ' '.join(parts) if parts else total_time
+            
+            # Servings
+            recipe['recipe_quantity'] = str(recipe_data.get('recipeYield', ''))
+            
+            # Ingredients
+            ingredients_raw = recipe_data.get('recipeIngredient', [])
+            if ingredients_raw:
+                recipe['ingredients_raw'] = ' | '.join(ingredients_raw)
+                # Parse ingredients
+                ingredients_structured = [parse_ingredient(ing) for ing in ingredients_raw]
+                recipe['ingredients_json'] = json.dumps(ingredients_structured, ensure_ascii=False)
+            
+            # Instructions
+            instructions = recipe_data.get('recipeInstructions', [])
+            steps = []
+            for i, step in enumerate(instructions, 1):
+                if isinstance(step, dict):
+                    step_text = step.get('text', '')
+                elif isinstance(step, str):
+                    step_text = step
+                else:
+                    continue
+                    
                 if step_text:
                     steps.append(f"{i}. {step_text}")
+            
+            if steps:
+                recipe['steps'] = ' | '.join(steps)
+            
+            # Image
+            image = recipe_data.get('image')
+            if isinstance(image, list) and image:
+                recipe['images'] = image[0] if isinstance(image[0], str) else image[0].get('url', '')
+            elif isinstance(image, str):
+                recipe['images'] = image
+            elif isinstance(image, dict):
+                recipe['images'] = image.get('url', '')
+            
+            # Categories/Keywords
+            keywords = recipe_data.get('keywords', '')
+            category = recipe_data.get('recipeCategory', '')
+            tags = []
+            if keywords:
+                tags.append(keywords)
+            if category:
+                tags.append(category)
+            if tags:
+                recipe['tags'] = ' | '.join(tags)
         
-        if steps:
-            recipe['steps'] = ' | '.join(steps)
-        
-        # Main image
-        img = soup.find('img', class_='recipe-media__image')
-        if img and img.get('src'):
-            recipe['images'] = img['src']
-        elif img and img.get('data-src'):
-            recipe['images'] = img['data-src']
-        
-        # Tags/categories
-        tags = []
-        tags_section = soup.find('div', class_='recipe-tags')
-        if tags_section:
-            tag_links = tags_section.find_all('a')
-            for tag in tag_links:
-                tag_text = tag.get_text(strip=True)
-                if tag_text:
-                    tags.append(tag_text)
-        
-        if tags:
-            recipe['tags'] = ' | '.join(tags)
+        # Fallback to HTML parsing if JSON-LD is incomplete
+        if not recipe['name']:
+            title = soup.find('h1')
+            if title:
+                recipe['name'] = title.get_text(strip=True)
         
         # Verify we have minimum data
         if recipe['name'] and (recipe['ingredients_raw'] or recipe['steps']):
@@ -331,7 +345,7 @@ def scrape_marmiton_to_csv(
     all_urls = []
     seen_urls = set()
     
-    # Popular categories
+    # Popular categories - expanded list
     category_urls = [
         "https://www.marmiton.org/recettes/top-recettes.aspx",
         "https://www.marmiton.org/recettes/recettes-rapides.aspx",
@@ -339,16 +353,40 @@ def scrape_marmiton_to_csv(
         "https://www.marmiton.org/recettes/index/categorie/plat-principal",
         "https://www.marmiton.org/recettes/index/categorie/dessert",
         "https://www.marmiton.org/recettes/index/categorie/accompagnement",
+        "https://www.marmiton.org/recettes/index/plat/plat-principal",
+        "https://www.marmiton.org/recettes/index/plat/entree",
+        "https://www.marmiton.org/recettes/index/plat/dessert",
+        "https://www.marmiton.org/recettes/index/ingredient/poulet",
+        "https://www.marmiton.org/recettes/index/ingredient/viande",
+        "https://www.marmiton.org/recettes/index/ingredient/poisson",
+        "https://www.marmiton.org/recettes/index/ingredient/legumes",
+        "https://www.marmiton.org/recettes/index/ingredient/chocolat",
     ]
     
     print("Fetching from popular categories...")
     for cat_url in category_urls:
-        urls = get_marmiton_urls_from_page(cat_url, 50)
-        for url in urls:
-            if url not in seen_urls:
-                seen_urls.add(url)
-                all_urls.append(url)
-        time.sleep(delay)
+        # Fetch more pages from each category
+        for page in range(1, 5):  # Fetch 4 pages per category
+            if page == 1:
+                url = cat_url
+            else:
+                # Add pagination parameter
+                separator = '&' if '?' in cat_url else '?'
+                url = f"{cat_url}{separator}page={page}"
+            
+            urls = get_marmiton_urls_from_page(url, 100)
+            new_count = 0
+            for url in urls:
+                if url not in seen_urls:
+                    seen_urls.add(url)
+                    all_urls.append(url)
+                    new_count += 1
+            
+            if new_count == 0 and page > 1:
+                # No new URLs found, stop pagination for this category
+                break
+                
+            time.sleep(delay)
     
     print(f"  {len(all_urls)} recipes from categories\n")
     
