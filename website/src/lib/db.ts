@@ -90,6 +90,110 @@ export interface FoodProduct {
 }
 
 /**
+ * Recipe interface
+ */
+export interface Recipe {
+    id?: number;
+    name: string;
+    author_tip?: string;
+    budget?: string;
+    cook_time?: string;
+    difficulty?: string;
+    images?: string; // JSON array serialized as string
+    ingredients?: string; // JSON array serialized as string
+    nb_comments?: string;
+    prep_time?: string;
+    rate?: string;
+    recipe_quantity?: string;
+    steps?: string; // JSON array serialized as string
+    total_time?: string;
+    url?: string;
+    description?: string;
+    created_at?: string;
+    updated_at?: string;
+}
+
+/**
+ * Query recipes (list)
+ */
+export function queryRecipes({
+    page = 1,
+    limit = 50,
+    search = ''
+}: {
+    page?: number;
+    limit?: number;
+    search?: string;
+}): { recipes: Recipe[]; total: number; pages: number } {
+    const database = getDatabase();
+
+    const whereClauses: string[] = [];
+    const params: any[] = [];
+
+    if (search) {
+        whereClauses.push('(name LIKE ?)');
+        params.push(`%${search}%`);
+    }
+
+    const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const countQuery = `SELECT COUNT(*) as total FROM recettes ${whereClause}`;
+    const countResult = database.prepare(countQuery).get(...params) as { total: number };
+    const total = countResult.total;
+
+    const offset = (page - 1) * limit;
+    const query = `
+        SELECT * FROM recettes
+        ${whereClause}
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+    `;
+
+    const recipes = database.prepare(query).all(...params, limit, offset) as Recipe[];
+    const pages = Math.ceil(total / limit);
+
+    return { recipes, total, pages };
+}
+
+/**
+ * Create a new recipe
+ */
+export function createRecipe(recipe: Recipe): Recipe {
+    const database = getDatabase();
+
+    const stmt = database.prepare(`
+        INSERT INTO recettes (
+            name, author_tip, budget, cook_time, difficulty, images, ingredients,
+            nb_comments, prep_time, rate, recipe_quantity, steps, total_time, url, description, created_at, updated_at
+        ) VALUES (
+            @name, @author_tip, @budget, @cook_time, @difficulty, @images, @ingredients,
+            @nb_comments, @prep_time, @rate, @recipe_quantity, @steps, @total_time, @url, @description, datetime('now'), NULL
+        )
+    `);
+
+    const info = stmt.run({
+        name: recipe.name,
+        author_tip: recipe.author_tip || null,
+        budget: recipe.budget || null,
+        cook_time: recipe.cook_time || null,
+        difficulty: recipe.difficulty || null,
+        images: recipe.images || null,
+        ingredients: recipe.ingredients || null,
+        nb_comments: recipe.nb_comments || null,
+        prep_time: recipe.prep_time || null,
+        rate: recipe.rate || null,
+        recipe_quantity: recipe.recipe_quantity || null,
+        steps: recipe.steps || null,
+        total_time: recipe.total_time || null,
+        url: recipe.url || null,
+        description: recipe.description || null
+    });
+
+    const id = info.lastInsertRowid as number;
+    return { ...recipe, id, created_at: new Date().toISOString() };
+}
+
+/**
  * Query products with filters and pagination
  */
 export function queryProducts({

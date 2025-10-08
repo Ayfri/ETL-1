@@ -116,8 +116,18 @@ def load_data(csv_path: str | Path, db_path: str | Path) -> None:
         
         # Insert products
         print("\nInserting products...")
-        products_data = df[PRODUCTS_COLUMNS].copy()
-        
+
+        # Be tolerant to missing columns: select only columns present in the CSV
+        present_product_cols = [c for c in PRODUCTS_COLUMNS if c in df.columns]
+        missing_product_cols = [c for c in PRODUCTS_COLUMNS if c not in df.columns]
+        if missing_product_cols:
+            print(f"⚠️  Colonnes produits manquantes dans le CSV (elles seront ignorées): {missing_product_cols}")
+
+        if 'code' not in df.columns:
+            raise Exception("CSV must contain 'code' column")
+
+        products_data = df[present_product_cols].copy()
+
         # Rename columns to match database schema
         products_data.columns = [normalize_column_name(col) for col in products_data.columns]
         
@@ -138,10 +148,18 @@ def load_data(csv_path: str | Path, db_path: str | Path) -> None:
         
         # Insert nutrition facts
         print("\nInserting nutrition facts...")
-        nutrition_data = df[['code'] + NUTRITION_COLUMNS].copy()
-        
+
+        # Be tolerant to missing nutrition columns as well
+        present_nutrition_cols = [c for c in NUTRITION_COLUMNS if c in df.columns]
+        missing_nutrition_cols = [c for c in NUTRITION_COLUMNS if c not in df.columns]
+        if missing_nutrition_cols:
+            print(f"⚠️  Colonnes nutrition manquantes dans le CSV (elles seront ignorées): {missing_nutrition_cols}")
+
+        nutrition_columns_input = ['code'] + present_nutrition_cols
+        nutrition_data = df[nutrition_columns_input].copy()
+
         # Rename columns
-        nutrition_data.columns = ['product_code'] + [normalize_column_name(col) for col in NUTRITION_COLUMNS]
+        nutrition_data.columns = ['product_code'] + [normalize_column_name(col) for col in present_nutrition_cols]
         
         # Ensure product_code is string (not float)
         nutrition_data['product_code'] = nutrition_data['product_code'].astype(str)

@@ -297,3 +297,28 @@ FROM products
 WHERE completeness >= 0.8
   AND nutriscore_grade IS NOT NULL
   AND image_url IS NOT NULL;
+
+-- Recipes table to store user-created recipes (fields requested)
+
+CREATE TABLE IF NOT EXISTS recettes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    author_tip TEXT,
+    budget TEXT,
+    cook_time TEXT,
+    difficulty TEXT,
+    images TEXT, -- JSON array of image URLs (stored as TEXT)
+    ingredients TEXT, -- JSON array or newline-separated strings (stored as TEXT)
+    nb_comments TEXT,
+    prep_time TEXT,
+    rate TEXT,
+    recipe_quantity TEXT,
+    steps TEXT, -- JSON array or newline-separated strings (stored as TEXT)
+    total_time TEXT,
+    url TEXT,
+    description TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_recettes_name ON recettes(name);
