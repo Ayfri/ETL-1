@@ -1,21 +1,18 @@
 <script lang="ts">
     import '../app.css';
-    import favicon from '$lib/assets/favicon.svg';
-    
+    import favicon from '$lib/assets/icon.png';
+    import Header from '$lib/components/Header.svelte';
+
     let { children } = $props();
 </script>
 
 <svelte:head>
     <link rel="icon" href={favicon} />
+	<title>Recipe Search</title>
 </svelte:head>
 
-<nav style="padding:0.5rem 1rem; border-bottom:1px solid #eee; display:flex; gap:1rem; align-items:center;">
-    <a href="/" style="text-decoration:none; font-weight:600;">Encyclopédie</a>
-    <a href="/ingredients" style="text-decoration:none;">Ingrédients</a>
-    <a href="/recipes" style="text-decoration:none;">Recettes</a>
-</nav>
+<Header />
 
-
-<main style="padding:1rem;">
+<main>
     {@render children?.()}
 </main>

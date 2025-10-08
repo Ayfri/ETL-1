@@ -119,14 +119,14 @@
     function nextPage() {
         const maxPage = Math.max(1, Math.ceil(total / data.limit));
         if (page < maxPage) {
-            page = page + 1;
+            page += 1;
             loadFoods();
         }
     }
 
     function prevPage() {
         if (page > 1) {
-            page = page - 1;
+            page -= 1;
             loadFoods();
         }
     }
@@ -223,20 +223,20 @@
 				<button onclick={prevPage} disabled={page <= 1} class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
 					<ChevronLeft size={16} />
 				</button>
-				
+
 				<div class="flex items-center gap-2">
 					<span class="text-sm font-medium">Page</span>
-                    <input 
-                        type="number" 
-                        min="1" 
-                        max={Math.max(1, Math.ceil(total / data.limit))} 
-                        value={page} 
+                    <input
+                        type="number"
+                        min="1"
+                        max={Math.max(1, Math.ceil(total / data.limit))}
+                        value={page}
                         onchange={(e: Event) => goToPage(parseInt((e.target as HTMLInputElement).value) || 1)}
                         class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
                     />
 					<span class="text-sm">sur {Math.max(1, Math.ceil(total / data.limit))}</span>
 				</div>
-				
+
 				<button onclick={nextPage} disabled={page >= Math.max(1, Math.ceil(total / data.limit))} class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
 					<ChevronRight size={16} />
 				</button>
