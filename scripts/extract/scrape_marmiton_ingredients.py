@@ -26,7 +26,7 @@ BASE_URL = "https://www.marmiton.org/recettes/index/ingredient"
 OUTPUT_CSV = Path("data/raw/ingredients_raw.csv")
 
 
-def fetch_page(url: str, timeout: float = 10.0) -> requests.Response | None:
+def fetch_page(url: str, timeout: float = 10.0, silent_404: bool = False) -> requests.Response | None:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
@@ -35,7 +35,11 @@ def fetch_page(url: str, timeout: float = 10.0) -> requests.Response | None:
         resp.raise_for_status()
         return resp
     except requests.HTTPError as e:
-        print(f"HTTP error for {url}: {e}")
+        # Silently ignore 404 errors during pagination
+        if e.response.status_code == 404 and silent_404:
+            return None
+        if e.response.status_code != 404:
+            print(f"HTTP error for {url}: {e}")
         return None
     except requests.RequestException as e:
         print(f"Request error for {url}: {e}")
@@ -78,7 +82,7 @@ def parse_ingredients_from_soup(soup: BeautifulSoup) -> list[tuple[str, str, str
     return results
 
 
-def fetch_recipes_for_ingredient(ingredient_url: str, max_recipes: int = 100, delay: float = 0.5) -> list[str]:
+def fetch_recipes_for_ingredient(ingredient_url: str, max_recipes: int = 100, delay: float = 0.3) -> list[str]:
     """
     Fetch recipe URLs from an ingredient detail page with pagination support.
     
@@ -101,7 +105,8 @@ def fetch_recipes_for_ingredient(ingredient_url: str, max_recipes: int = 100, de
         else:
             url = f"{ingredient_url}/{page}"
         
-        resp = fetch_page(url)
+        # Silently ignore 404 errors for pagination (ingredient has fewer pages)
+        resp = fetch_page(url, silent_404=(page > 1))
         if not resp:
             break
         
@@ -135,14 +140,14 @@ def fetch_recipes_for_ingredient(ingredient_url: str, max_recipes: int = 100, de
         
         page += 1
         
-        # Add delay between pages to avoid overwhelming the server
+        # Reduced delay between pages
         if page > 1:
             time.sleep(delay)
     
     return recipe_urls
 
 
-def scrape_all_letters(delay: float = 0.6, max_recipes_per_ingredient: int = 100) -> list[tuple[str, str, list[str]]]:
+def scrape_all_letters(delay: float = 0.4, max_recipes_per_ingredient: int = 100) -> list[tuple[str, str, list[str]]]:
     """
     Scrape all ingredient listing pages (by letter) and fetch recipe URLs for each ingredient.
     
@@ -174,16 +179,16 @@ def scrape_all_letters(delay: float = 0.6, max_recipes_per_ingredient: int = 100
                 url = f"{url}/{page}"
 
             print(f"  -> Listing page {page}: {url}")
-            resp = fetch_page(url)
+            resp = fetch_page(url, silent_404=(page > 1))
             if not resp:
-                print(f"     ✗ Page {page} not available or error")
+                if page == 1:
+                    print(f"     ✗ Page {page} not available")
                 break
 
             soup = BeautifulSoup(resp.content, "html.parser")
             ingredients_on_page = parse_ingredients_from_soup(soup)
 
             if not ingredients_on_page:
-                print(f"     - No ingredients found on page {page}")
                 break
 
             new_found = 0
@@ -193,16 +198,20 @@ def scrape_all_letters(delay: float = 0.6, max_recipes_per_ingredient: int = 100
                     seen_names.add(key)
                     
                     # Fetch recipes from the ingredient's detail page
-                    print(f"     → Fetching recipes for: {name}")
+                    print(f"     → {name}", end="", flush=True)
                     recipe_urls = fetch_recipes_for_ingredient(
                         ingredient_page_url, 
                         max_recipes=max_recipes_per_ingredient, 
-                        delay=0.5
+                        delay=0.3
                     )
-                    print(f"       ✓ Found {len(recipe_urls)} recipes")
+                    print(f" → {len(recipe_urls)} recipes")
                     
                     all_items.append((image_url, name, recipe_urls))
                     new_found += 1
+                    
+                    # Save progress after each ingredient
+                    save_to_csv(all_items, OUTPUT_CSV)
+                    
                     time.sleep(delay)
 
             print(f"     + {new_found} new ingredients on page {page}")
@@ -239,9 +248,8 @@ def main() -> None:
     """Main entry point."""
     print("Scraping Marmiton ingredients and their recipes...")
     items = scrape_all_letters()
-    print(f"Found {len(items)} unique ingredients")
-    save_to_csv(items, OUTPUT_CSV)
-    print(f"Saved to {OUTPUT_CSV}")
+    print(f"\n✓ Scraping complete! Found {len(items)} unique ingredients")
+    print(f"✓ CSV saved to {OUTPUT_CSV}")
 
 
 if __name__ == "__main__":
