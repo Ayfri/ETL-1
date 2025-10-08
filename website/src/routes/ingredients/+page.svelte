@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import RecipeModal from '$lib/components/RecipeModal.svelte';
+    import { Search } from '@lucide/svelte';
 
     let ingredients = [] as any[];
     let loadError: string | null = null;
@@ -100,64 +101,87 @@ function onQueryInput(e: Event) {
 }
 </script>
 
-<div class="p-6">
-    <h1 class="text-2xl font-bold mb-4">Ingrédients</h1>
+<div class="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <header class="mb-6">
+            <h1 class="text-3xl font-extrabold text-gray-900 flex items-center gap-3">
+                <span class="inline-block w-2 h-8 bg-emerald-500 rounded"></span>
+                Ingrédients
+            </h1>
+            <p class="text-sm text-gray-600 mt-1">Parcourez et cherchez les ingrédients — sélectionnez-en un pour voir les recettes associées.</p>
+        </header>
 
-    <div class="mb-4 flex gap-2 items-center">
-        <input placeholder="Rechercher..." class="px-3 py-2 border rounded w-full max-w-sm" value={query} on:input={onQueryInput} />
-        <button class="px-2 py-1 rounded bg-gray-100" on:click={() => { selectedLetter = null; page = 1; loadIngredients(); }}>Tous</button>
-        {#each letters as l}
-            <button class="px-2 py-1 rounded {selectedLetter === l ? 'bg-emerald-500 text-white' : 'bg-white'}" on:click={() => { selectedLetter = l; page = 1; loadIngredients(); }}>{l.toUpperCase()}</button>
-        {/each}
-    </div>
+        <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="flex items-center gap-3 w-full sm:max-w-md">
+                <div class="flex items-center gap-2 bg-white border border-gray-200 px-3 py-2 rounded-full shadow-sm w-full">
+                    <Search class="text-gray-400" />
+                    <input placeholder="Rechercher..." class="outline-none w-full text-sm" value={query} on:input={onQueryInput} />
+                    {#if query}
+                        <button type="button" class="ml-2 text-sm text-gray-500" on:click={() => { query = ''; debouncedQuery = ''; page = 1; loadIngredients(); }}>Effacer</button>
+                    {/if}
+                </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2 items-center">
+                <button type="button" class="px-3 py-1 rounded-full text-sm font-medium transition-all {selectedLetter === null ? 'bg-emerald-500 text-white shadow-md' : 'bg-white text-gray-700 border border-gray-200 hover:bg-emerald-50'}" on:click={() => { selectedLetter = null; page = 1; loadIngredients(); }}>Tous</button>
+                {#each letters as l}
+                    <button type="button" class="px-3 py-1 rounded-full text-sm font-medium transition-all {selectedLetter === l ? 'bg-emerald-500 text-white shadow-md' : 'bg-white text-gray-700 border border-gray-200 hover:bg-emerald-50'}" on:click={() => { selectedLetter = l; page = 1; loadIngredients(); }}>{l.toUpperCase()}</button>
+                {/each}
+            </div>
+        </div>
 
     {#if loadError}
         <div class="text-red-600">{loadError}</div>
     {:else}
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {#each ingredients as ing}
-                <button type="button" class="bg-white rounded shadow p-2 flex flex-col items-center gap-2 cursor-pointer" on:click={() => openIngredient(ing.name)}>
+                <button
+                    type="button"
+                    class="bg-white rounded shadow p-2 flex flex-col items-center gap-2 cursor-pointer transition-shadow duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-300 {selectedIngredient === ing.name ? 'ring-4 ring-emerald-400' : ''}"
+                    on:click={() => openIngredient(ing.name)}
+                >
                     <img src={ing.image_url || '/favicon.svg'} alt={ing.name} class="w-20 h-20 object-cover rounded" />
-                    <div class="text-sm text-center">{ing.name}</div>
+                    <div class="text-sm text-center text-gray-800">{ing.name}</div>
                 </button>
             {/each}
         </div>
-        <div class="mt-4 flex items-center justify-center gap-2">
-            <button class="px-3 py-1 bg-gray-100 rounded" on:click={() => { if (page > 1) { page -= 1; loadIngredients(); } }} disabled={page <= 1}>Préc</button>
-            <div>Page {page} / {Math.max(1, Math.ceil(total / limit))}</div>
-            <button class="px-3 py-1 bg-gray-100 rounded" on:click={() => { if (page < Math.max(1, Math.ceil(total / limit))) { page += 1; loadIngredients(); } }} disabled={page >= Math.max(1, Math.ceil(total / limit))}>Suiv</button>
+        <div class="mt-6 flex items-center justify-center gap-2">
+            <button class="px-3 py-1 bg-white border border-gray-200 rounded shadow-sm hover:bg-gray-50" on:click={() => { if (page > 1) { page -= 1; loadIngredients(); } }} disabled={page <= 1}>Préc</button>
+            <div class="text-sm text-gray-700">Page {page} / {Math.max(1, Math.ceil(total / limit))}</div>
+            <button class="px-3 py-1 bg-white border border-gray-200 rounded shadow-sm hover:bg-gray-50" on:click={() => { if (page < Math.max(1, Math.ceil(total / limit))) { page += 1; loadIngredients(); } }} disabled={page >= Math.max(1, Math.ceil(total / limit))}>Suiv</button>
         </div>
     {/if}
 
-    {#if showRecipesMenu}
-        <div class="fixed inset-y-0 right-0 z-40 w-80 bg-white shadow-lg p-4 overflow-auto">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="font-bold">Recettes: {selectedIngredient}</h3>
-                <button class="px-2 py-1" on:click={closeRecipesMenu} aria-label="Fermer">✕</button>
+        <div class="relative">
+            <div class="fixed inset-y-0 right-0 z-50 w-80 bg-white shadow-2xl p-4 overflow-auto transition-all duration-500 ease-in-out {showRecipesMenu ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}" aria-hidden={!showRecipesMenu}>
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-bold">Recettes: {selectedIngredient}</h3>
+                    <button class="px-2 py-1 text-gray-600" on:click={closeRecipesMenu} aria-label="Fermer">✕</button>
+                </div>
+
+                {#if recipesLoading}
+                    <div>Chargement...</div>
+                {:else if recipesError}
+                    <div class="text-red-600">{recipesError}</div>
+                {:else if recipes.length === 0}
+                    <div>Aucune recette trouvée.</div>
+                {:else}
+                    <ul class="space-y-2">
+                        {#each recipes as r}
+                            <li>
+                                <button type="button" class="flex items-center gap-2 p-2 rounded hover:bg-gray-100 cursor-pointer w-full text-left" on:click={() => { selectedRecipe = r; showRecipeModal = true; }}>
+                                    <img src={getFirstImageForRecipeLocal(r)} alt={r.name} class="w-12 h-12 object-cover rounded" />
+                                    <div class="text-sm">{r.name}</div>
+                                </button>
+                            </li>
+                        {/each}
+                    </ul>
+                {/if}
             </div>
 
-            {#if recipesLoading}
-                <div>Chargement...</div>
-            {:else if recipesError}
-                <div class="text-red-600">{recipesError}</div>
-            {:else if recipes.length === 0}
-                <div>Aucune recette trouvée.</div>
-            {:else}
-                <ul class="space-y-2">
-                    {#each recipes as r}
-                        <li>
-                            <button type="button" class="flex items-center gap-2 p-2 rounded hover:bg-gray-100 cursor-pointer w-full text-left" on:click={() => { selectedRecipe = r; showRecipeModal = true; }}>
-                                <img src={getFirstImageForRecipeLocal(r)} alt={r.name} class="w-12 h-12 object-cover rounded" />
-                                <div class="text-sm">{r.name}</div>
-                            </button>
-                        </li>
-                    {/each}
-                </ul>
-            {/if}
+            <RecipeModal open={showRecipeModal} recipe={selectedRecipe} on:close={closeRecipe} />
         </div>
-
-        <RecipeModal open={showRecipeModal} recipe={selectedRecipe} on:close={closeRecipe} />
-    {/if}
+    </div>
 </div>
 
 
