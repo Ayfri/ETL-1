@@ -100,7 +100,8 @@ export interface Recipe {
     cook_time?: string;
     difficulty?: string;
     images?: string; // JSON array serialized as string
-    ingredients?: string; // JSON array serialized as string
+    ingredients_raw?: string; // Pipe-separated raw ingredient text
+    ingredients_json?: string; // JSON array serialized as string
     nb_comments?: string;
     prep_time?: string;
     rate?: string;
@@ -138,20 +139,20 @@ export function queryRecipes({
     }
 
     if (ingredient) {
-        // simple substring match on the serialized ingredients field
-        whereClauses.push('(ingredients LIKE ?)');
-        params.push(`%${ingredient}%`);
+        // search both raw and JSON-serialized ingredient fields
+        whereClauses.push('(ingredients_json LIKE ? OR ingredients_raw LIKE ?)');
+        params.push(`%${ingredient}%`, `%${ingredient}%`);
     }
 
     const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
-    const countQuery = `SELECT COUNT(*) as total FROM recettes ${whereClause}`;
+    const countQuery = `SELECT COUNT(*) as total FROM recipes ${whereClause}`;
     const countResult = database.prepare(countQuery).get(...params) as { total: number };
     const total = countResult.total;
 
     const offset = (page - 1) * limit;
     const query = `
-        SELECT * FROM recettes
+        SELECT * FROM recipes
         ${whereClause}
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
@@ -170,11 +171,11 @@ export function createRecipe(recipe: Recipe): Recipe {
     const database = getDatabase();
 
     const stmt = database.prepare(`
-        INSERT INTO recettes (
-            name, author_tip, budget, cook_time, difficulty, images, ingredients,
+        INSERT INTO recipes (
+            name, author_tip, budget, cook_time, difficulty, images, ingredients_raw, ingredients_json,
             nb_comments, prep_time, rate, recipe_quantity, steps, total_time, url, description, created_at, updated_at
         ) VALUES (
-            @name, @author_tip, @budget, @cook_time, @difficulty, @images, @ingredients,
+            @name, @author_tip, @budget, @cook_time, @difficulty, @images, @ingredients_raw, @ingredients_json,
             @nb_comments, @prep_time, @rate, @recipe_quantity, @steps, @total_time, @url, @description, datetime('now'), NULL
         )
     `);
@@ -186,7 +187,8 @@ export function createRecipe(recipe: Recipe): Recipe {
         cook_time: recipe.cook_time || null,
         difficulty: recipe.difficulty || null,
         images: recipe.images || null,
-        ingredients: recipe.ingredients || null,
+        ingredients_raw: (recipe as any).ingredients_raw || null,
+        ingredients_json: (recipe as any).ingredients_json || null,
         nb_comments: recipe.nb_comments || null,
         prep_time: recipe.prep_time || null,
         rate: recipe.rate || null,
