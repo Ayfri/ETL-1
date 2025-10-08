@@ -298,38 +298,58 @@ WHERE completeness >= 0.8
   AND nutriscore_grade IS NOT NULL
   AND image_url IS NOT NULL;
 
--- Recipes table to store user-created recipes (fields requested)
-
-CREATE TABLE IF NOT EXISTS recettes (
+-- Recipes table to store scraped recipes from Marmiton
+CREATE TABLE IF NOT EXISTS recipes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    author_tip TEXT,
-    budget TEXT,
-    cook_time TEXT,
-    difficulty TEXT,
-    images TEXT, -- JSON array of image URLs (stored as TEXT)
-    ingredients TEXT, -- JSON array or newline-separated strings (stored as TEXT)
-    nb_comments TEXT,
-    prep_time TEXT,
+    url TEXT UNIQUE NOT NULL,
     rate TEXT,
-    recipe_quantity TEXT,
-    steps TEXT, -- JSON array or newline-separated strings (stored as TEXT)
+    nb_comments TEXT,
+    difficulty TEXT,
+    budget TEXT,
+    prep_time TEXT,
+    cook_time TEXT,
     total_time TEXT,
-    url TEXT,
+    recipe_quantity TEXT,
+    ingredients_raw TEXT, -- Pipe-separated raw ingredient text
+    ingredients_json TEXT, -- JSON array of parsed ingredients
+    steps TEXT, -- Pipe-separated steps
+    images TEXT, -- Image URL
+    tags TEXT, -- Pipe-separated tags
+    author_tip TEXT,
     description TEXT,
+    source TEXT DEFAULT 'marmiton', -- Source of the recipe
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_recettes_name ON recettes(name);
+CREATE INDEX IF NOT EXISTS idx_recipes_name ON recipes(name);
+CREATE INDEX IF NOT EXISTS idx_recipes_url ON recipes(url);
 
 -- Ingredients table (scraped from Marmiton)
 CREATE TABLE IF NOT EXISTS ingredients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
     image_url TEXT,
-    source TEXT, -- e.g. 'marmiton'
+    source TEXT DEFAULT 'marmiton', -- e.g. 'marmiton'
     created_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_ingredients_name ON ingredients(name);
+
+-- Junction table for many-to-many relationship between recipes and ingredients
+CREATE TABLE IF NOT EXISTS recipe_ingredients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recipe_id INTEGER NOT NULL,
+    ingredient_id INTEGER NOT NULL,
+    quantity TEXT, -- e.g. "350"
+    unit TEXT, -- e.g. "g", "cuillères à soupe"
+    raw_text TEXT, -- Original ingredient text
+    FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE,
+    FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+    UNIQUE(recipe_id, ingredient_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe ON recipe_ingredients(recipe_id);
+CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredient ON recipe_ingredients(ingredient_id);
+
