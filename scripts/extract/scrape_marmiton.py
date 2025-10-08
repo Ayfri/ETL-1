@@ -366,6 +366,7 @@ def scrape_marmiton_to_csv(
     print("Fetching from popular categories...")
     for cat_url in category_urls:
         # Fetch more pages from each category
+        print(f"  Category: {cat_url}")
         for page in range(1, 5):  # Fetch 4 pages per category
             if page == 1:
                 url = cat_url
