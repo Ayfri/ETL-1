@@ -148,7 +148,7 @@ export function queryRecipes({
 
     if (ingredient) {
         // simple substring match on the serialized ingredients field
-        whereClauses.push('(ingredients LIKE ?)');
+        whereClauses.push('(ingredients_raw LIKE ?)');
         params.push(`%${ingredient}%`);
     }
 
