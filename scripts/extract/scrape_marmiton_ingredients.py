@@ -140,7 +140,13 @@ async def fetch_page_async(session: aiohttp.ClientSession, url: str, rate_limite
             if response.status == 404 and silent_404:
                 return None
             response.raise_for_status()
-            return await response.text()
+            # Read raw bytes and handle encoding properly
+            content = await response.read()
+            try:
+                return content.decode('utf-8')
+            except UnicodeDecodeError:
+                # Fallback to latin-1 which can decode any byte sequence
+                return content.decode('latin-1')
     except aiohttp.ClientError as e:
         if not (silent_404 and "404" in str(e)):
             print(f"Request error for {url}: {e}")
