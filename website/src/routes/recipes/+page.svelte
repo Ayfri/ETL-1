@@ -1,212 +1,245 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { writable, get } from 'svelte/store';
-  import RecipeModal from '$lib/components/RecipeModal.svelte';
-  import AddRecipeModal from '$lib/components/AddRecipeModal.svelte';
+	import { onMount } from 'svelte';
+	import { writable } from 'svelte/store';
+	import RecipeModal from '$lib/components/RecipeModal.svelte';
+	import AddRecipeModal from '$lib/components/AddRecipeModal.svelte';
+	import { ChevronLeft, ChevronRight } from '@lucide/svelte';
 
-  const recipes = writable([] as any[]);
-  const loading = writable(true);
+	const recipes = writable([] as any[]);
+	const loading = writable(true);
 
-  // Form state matching v0.4
-  let name = '';
-  let author_tip = '';
-  let budget = '';
-  let cook_time = '';
-  let difficulty = '';
-  let images_input = ''; // newline-separated URLs
-  let ingredients_input = '';
-  let nb_comments = '';
-  let prep_time = '';
-  let rate = '';
-  let recipe_quantity = '';
-  let steps_input = '';
-  let total_time = '';
-  let url = '';
-  let description = '';
+	let currentPage = $state(1);
+	let totalRecipes = $state(0);
+	let totalPages = $state(0);
+	const limit = 20;
 
-  // Modal state
-  let modalOpen = false;
-  let selectedRecipe: any = null;
-  // Add recipe modal
-  let addModalOpen = false;
+	let name = $state('');
+	let authorTip = $state('');
+	let budget = $state('');
+	let cookTime = $state('');
+	let difficulty = $state('');
+	let imagesInput = $state('');
+	let ingredientsInput = $state('');
+	let nbComments = $state('');
+	let prepTime = $state('');
+	let rate = $state('');
+	let recipeQuantity = $state('');
+	let stepsInput = $state('');
+	let totalTime = $state('');
+	let url = $state('');
+	let description = $state('');
 
-  function openRecipe(r: any) {
-    selectedRecipe = r;
-    modalOpen = true;
-  }
+	let modalOpen = $state(false);
+	let selectedRecipe = $state<any>(null);
+	let addModalOpen = $state(false);
 
-  function closeModal() {
-    modalOpen = false;
-    selectedRecipe = null;
-  }
+	function openRecipe(recipe: any) {
+		selectedRecipe = recipe;
+		modalOpen = true;
+	}
 
-  function openAddModal() {
-    addModalOpen = true;
-  }
+	function closeModal() {
+		modalOpen = false;
+		selectedRecipe = null;
+	}
 
-  function closeAddModal() {
-    addModalOpen = false;
-  }
+	function openAddModal() {
+		addModalOpen = true;
+	}
 
-  async function loadRecipes() {
-    loading.set(true);
-    try {
-      const res = await fetch('/api/recipes');
-      const data = await res.json();
-      recipes.set(data.data || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      loading.set(false);
-    }
-  }
+	function closeAddModal() {
+		addModalOpen = false;
+	}
 
-  function parseListField(field: any): string[] {
-    if (!field) return [];
-    if (typeof field === 'string') {
-      try {
-        const parsed = JSON.parse(field);
-        if (Array.isArray(parsed)) return parsed;
-      } catch {}
-      return field.split('\n').map(s => s.trim()).filter(Boolean);
-    }
-    if (Array.isArray(field)) return field;
-    return [];
-  }
+	async function loadRecipes(page = 1) {
+		loading.set(true);
+		try {
+			const res = await fetch(`/api/recipes?page=${page}&limit=${limit}`);
+			const data = await res.json();
+			recipes.set(data.data || []);
+			totalRecipes = data.total || 0;
+			totalPages = data.pages || 0;
+			currentPage = page;
+		} catch (e) {
+			console.error(e);
+		} finally {
+			loading.set(false);
+		}
+	}
 
-  function formatImagesForDisplay(r: any) {
-    const imgs = parseListField(r.images || r.image_url || '');
-    return imgs.length ? imgs[0] : '';
-  }
+	function nextPage() {
+		if (currentPage < totalPages) {
+			loadRecipes(currentPage + 1);
+		}
+	}
 
-  async function submitRecipe() {
-    const images = images_input.split('\n').map(s => s.trim()).filter(Boolean);
-    const ingredients = ingredients_input.split('\n').map(s => s.trim()).filter(Boolean);
-    const steps = steps_input.split('\n').map(s => s.trim()).filter(Boolean);
+	function prevPage() {
+		if (currentPage > 1) {
+			loadRecipes(currentPage - 1);
+		}
+	}
 
-    const payload = {
-      name,
-      author_tip,
-      budget,
-      cook_time,
-      difficulty,
-      images: JSON.stringify(images),
-      ingredients: JSON.stringify(ingredients),
-      nb_comments,
-      prep_time,
-      rate,
-      recipe_quantity,
-      steps: JSON.stringify(steps),
-      total_time,
-      url,
-      description
-    };
+	function parseListField(field: any): string[] {
+		if (!field) return [];
+		if (typeof field === 'string') {
+			try {
+				const parsed = JSON.parse(field);
+				if (Array.isArray(parsed)) return parsed;
+			} catch {}
+			return field.split('\n').map(s => s.trim()).filter(Boolean);
+		}
+		if (Array.isArray(field)) return field;
+		return [];
+	}
 
-    try {
-      const res = await fetch('/api/recipes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+	function formatImagesForDisplay(recipe: any) {
+		const imgs = parseListField(recipe.images || recipe.image_url || '');
+		return imgs.length ? imgs[0] : '';
+	}
 
-      if (res.ok) {
-        // reset form
-        name = '';
-        author_tip = '';
-        budget = '';
-        cook_time = '';
-        difficulty = '';
-        images_input = '';
-        ingredients_input = '';
-        nb_comments = '';
-        prep_time = '';
-        rate = '';
-        recipe_quantity = '';
-        steps_input = '';
-        total_time = '';
-        url = '';
-        description = '';
-        await loadRecipes();
-      } else {
-        const err = await res.json();
-        alert(err.error || 'Erreur');
-      }
-    } catch (e) {
-      console.error(e);
-      alert('Erreur lors de la création');
-    }
-  }
+	async function submitRecipe() {
+		const images = imagesInput.split('\n').map(s => s.trim()).filter(Boolean);
+		const ingredients = ingredientsInput.split('\n').map(s => s.trim()).filter(Boolean);
+		const steps = stepsInput.split('\n').map(s => s.trim()).filter(Boolean);
 
-  onMount(loadRecipes);
+		const payload = {
+			name,
+			author_tip: authorTip,
+			budget,
+			cook_time: cookTime,
+			difficulty,
+			images: JSON.stringify(images),
+			ingredients: JSON.stringify(ingredients),
+			nb_comments: nbComments,
+			prep_time: prepTime,
+			rate,
+			recipe_quantity: recipeQuantity,
+			steps: JSON.stringify(steps),
+			total_time: totalTime,
+			url,
+			description
+		};
+
+		try {
+			const res = await fetch('/api/recipes', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(payload)
+			});
+
+			if (res.ok) {
+				name = '';
+				authorTip = '';
+				budget = '';
+				cookTime = '';
+				difficulty = '';
+				imagesInput = '';
+				ingredientsInput = '';
+				nbComments = '';
+				prepTime = '';
+				rate = '';
+				recipeQuantity = '';
+				stepsInput = '';
+				totalTime = '';
+				url = '';
+				description = '';
+				await loadRecipes();
+			} else {
+				const err = await res.json();
+				alert(err.error || 'Error');
+			}
+		} catch (e) {
+			console.error(e);
+			alert('Error creating recipe');
+		}
+	}
+
+	function goToPage(newPage: number) {
+		const maxPage = Math.max(1, Math.ceil(totalRecipes / limit));
+		if (newPage >= 1 && newPage <= maxPage) {
+			loadRecipes(newPage);
+		}
+	}
+
+	onMount(loadRecipes);
 </script>
 
-<style>
-  .page { max-width: 980px; margin: 0 auto; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
-  .grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
-  .card { background: #fff; border: 1px solid #eee; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);} 
-  h1 { margin-bottom: 0.5rem; }
-  .recipe-img { width:100%; height:160px; object-fit:cover; border-radius:8px; background:#fafafa; }
-  .badges { display:flex; gap:0.5rem; margin-top:0.5rem }
-  .badge { background:#f5f5f5; padding:0.25rem 0.5rem; border-radius:4px; font-size:0.85rem }
-  .title-row { display:flex; gap:1rem; align-items:center }
-  /* Modern theme */
-  .recipes-card { background: linear-gradient(180deg,#ffffff,#fffaf3); border: none; box-shadow: 0 8px 30px rgba(16,24,40,0.08); }
-  .card-compact { display:flex; gap:1rem; align-items:center; padding:0.75rem; border-radius:12px; border:1px solid rgba(16,24,40,0.03); }
-  .meta { display:flex; justify-content:space-between; width:100%; align-items:center }
-  .meta-main .name { font-size:1.05rem; display:block }
-  .meta-main .desc { color:#586069; font-size:0.92rem; margin-top:0.25rem }
-  .card-btn { all:unset; display:block; width:100%; text-align:left; cursor:pointer; padding:0; }
-  .card-btn:hover { transform: translateY(-4px); }
-  .badge { background:linear-gradient(90deg,#f3f4f6,#fff); padding:0.28rem 0.5rem; border-radius:8px; font-size:0.82rem; color:#374151 }
-  .recipes-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:1rem; margin-top:0.5rem }
-  .recipe-card { display:flex; flex-direction:column; gap:0.5rem; padding:0; }
-  .page-header { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:0.75rem }
-  .add-btn { background: linear-gradient(90deg,#06b6d4,#3b82f6); color:white; border:none; padding:0.5rem 0.9rem; border-radius:10px; cursor:pointer; font-weight:700 }
-</style>
+<div class="max-w-4xl mx-auto font-sans p-4">
+	<div class="flex items-center justify-between mb-6">
+		<h1 class="text-2xl font-bold">Recipes</h1>
+		<button class="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:opacity-90" onclick={openAddModal}>Add Recipe</button>
+	</div>
 
-<div class="page">
-  <div class="page-header">
-    <h1>Recettes</h1>
-    <button class="add-btn" on:click={openAddModal}>Ajouter une recette</button>
-  </div>
-  <div class="grid">
-    <section>
-      <div class="card recipes-card">
-        <div class="title-row">
-          <h2>Recettes enregistrées</h2>
-        </div>
 
-        {#if $loading}
-          <p>Chargement...</p>
-        {:else}
-          {#if $recipes.length === 0}
-            <p>Aucune recette.</p>
-          {:else}
-            <div class="recipes-grid">
-            {#each $recipes as r}
-              <article class="recipe-card card-compact">
-                <button class="card-btn" on:click={() => openRecipe(r)} aria-label={`Ouvrir ${r.name}`}>
-                  <img class="recipe-img" src={formatImagesForDisplay(r)} alt={r.name} />
-                  <div class="meta">
-                    <div class="meta-main">
-                      <strong class="name">{r.name}</strong>
-                      <div class="desc">{r.description}</div>
-                      <div class="badges">
-                        {#if r.prep_time}<div class="badge">Prépa: {r.prep_time}</div>{/if}
-                        {#if r.cook_time}<div class="badge">Cuisson: {r.cook_time}</div>{/if}
-                        {#if r.total_time}<div class="badge">Total: {r.total_time}</div>{/if}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              </article>
-            {/each}
+    {#if totalPages > 1}
+        <div class="flex items-center justify-center gap-4 bg-white/80 backdrop-blur-sm rounded-lg px-6 py-3 shadow-sm mt-6">
+            <button onclick={prevPage} disabled={currentPage <= 1}
+                    class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
+                <ChevronLeft size={16}/>
+            </button>
+
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-medium">Page</span>
+                <input
+                        type="number"
+                        min="1"
+                        max={Math.max(1, Math.ceil(totalRecipes / limit))}
+                        value={currentPage}
+                        onchange={(e) => goToPage(parseInt(e.target.value) || 1)}
+                        class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
+                />
+                <span class="text-sm">of {Math.max(1, Math.ceil(totalRecipes / limit))}</span>
             </div>
-          {/if}
-        {/if}
-      </div>
-    </section>
-  </div>
-  <RecipeModal open={modalOpen} recipe={selectedRecipe} on:close={closeModal} />
-  <AddRecipeModal open={addModalOpen} on:close={closeAddModal} on:created={async (e) => { await loadRecipes(); closeAddModal(); }} />
+
+            <button onclick={nextPage} disabled={currentPage >= Math.max(1, Math.ceil(totalRecipes / limit))}
+                    class="cursor-pointer px-4 py-2 bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200 transition-colors">
+                <ChevronRight size={16}/>
+            </button>
+        </div>
+    {/if}
+
+	<div class="space-y-6">
+		<section>
+			<div class="bg-gradient-to-br from-white to-orange-50 p-6 rounded-xl shadow-lg">
+				<div class="flex items-center gap-4 mb-4">
+					<h2 class="text-xl font-semibold">Saved Recipes</h2>
+				</div>
+
+				{#if $loading}
+					<p class="text-gray-500">Loading...</p>
+				{:else}
+					{#if $recipes.length === 0}
+						<p class="text-gray-500">No recipes.</p>
+					{:else}
+						<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
+							{#each $recipes as recipe}
+								<article class="flex flex-col gap-2 p-3 rounded-xl border border-gray-100 hover:shadow-md transition-shadow">
+									<button class="w-full text-left p-0 hover:transform hover:-translate-y-1 transition-transform" onclick={() => openRecipe(recipe)} aria-label={`Open ${recipe.name}`}>
+										<img class="w-full h-40 object-cover rounded-lg bg-gray-100" src={formatImagesForDisplay(recipe)} alt={recipe.name} />
+										<div class="flex justify-between items-center w-full mt-2">
+											<div class="flex-1">
+												<strong class="text-lg block">{recipe.name}</strong>
+												<div class="text-gray-600 text-sm mt-1">{recipe.description}</div>
+												<div class="flex gap-2 mt-2">
+													{#if recipe.prep_time}<span class="bg-gray-100 px-2 py-1 rounded text-xs">Prep: {recipe.prep_time}</span>{/if}
+													{#if recipe.cook_time}<span class="bg-gray-100 px-2 py-1 rounded text-xs">Cook: {recipe.cook_time}</span>{/if}
+													{#if recipe.total_time}<span class="bg-gray-100 px-2 py-1 rounded text-xs">Total: {recipe.total_time}</span>{/if}
+												</div>
+											</div>
+										</div>
+									</button>
+								</article>
+							{/each}
+						</div>
+
+						<div class="text-sm text-gray-600 mt-4">
+							{$recipes.length} recipes displayed out of {totalRecipes} total
+						</div>
+					{/if}
+				{/if}
+			</div>
+		</section>
+	</div>
+	<RecipeModal open={modalOpen} recipe={selectedRecipe} on:close={closeModal} />
+	<AddRecipeModal open={addModalOpen} on:close={closeAddModal} on:created={async (e) => { await loadRecipes(); closeAddModal(); }} />
 </div>

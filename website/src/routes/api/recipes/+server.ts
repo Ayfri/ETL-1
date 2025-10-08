@@ -11,7 +11,7 @@ export const GET: RequestHandler = async ({ url }) => {
 
         const result = queryRecipes({ page, limit, search, ingredient });
 
-        return json({ data: result.recipes, total: result.total, page, limit });
+        return json({ data: result.recipes, total: result.total, pages: result.pages, page, limit });
     } catch (error) {
         console.error('Error querying recipes:', error);
         return json({ error: 'Failed to query recipes', message: error instanceof Error ? error.message : 'Unknown' }, { status: 500 });
@@ -34,5 +34,3 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ error: 'Failed to create recipe', message: error instanceof Error ? error.message : 'Unknown' }, { status: 500 });
     }
 };
-
-

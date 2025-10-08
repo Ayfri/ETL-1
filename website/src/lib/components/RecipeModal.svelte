@@ -75,7 +75,7 @@
             <div class="section card">
               <h4>Ingrédients</h4>
               <ul>
-                {#each parseListField(recipe.ingredients) as ing}
+                {#each parseListField(recipe.ingredients || recipe.ingredients_raw) as ing}
                   <li>{ing}</li>
                 {/each}
               </ul>

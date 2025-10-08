@@ -42,11 +42,11 @@ export function getDatabase(): Database.Database {
 		);
 	}
 
-	db = new Database(dbPath, { readonly: true, fileMustExist: true });
-	
+	db = new Database(dbPath, { fileMustExist: true });
+
 	// Enable WAL mode for better concurrent read performance
 	db.pragma('journal_mode = WAL');
-	
+
 	console.log(`✓ Connected to database: ${dbPath}`);
 	return db;
 }
@@ -139,9 +139,9 @@ export function queryRecipes({
     }
 
     if (ingredient) {
-        // search both raw and JSON-serialized ingredient fields
-        whereClauses.push('(ingredients_json LIKE ? OR ingredients_raw LIKE ?)');
-        params.push(`%${ingredient}%`, `%${ingredient}%`);
+        // simple substring match on the serialized ingredients field
+        whereClauses.push('(ingredients LIKE ?)');
+        params.push(`%${ingredient}%`);
     }
 
     const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
