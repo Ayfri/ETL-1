@@ -26,10 +26,10 @@ BASE_URL = "https://www.marmiton.org/recettes/index/ingredient"
 OUTPUT_CSV = Path("data/raw/marmiton_recipes.csv")
 
 # Performance settings
-MAX_CONCURRENT_REQUESTS = 20  # Limit concurrent HTTP requests
-REQUEST_TIMEOUT = 10.0
-RATE_LIMIT_DELAY = 0.1  # Minimum delay between requests
-MAX_WORKERS = min(mp.cpu_count(), 8)  # Number of worker processes
+MAX_CONCURRENT_REQUESTS = 40  # Limit concurrent HTTP requests
+REQUEST_TIMEOUT = 6.0
+RATE_LIMIT_DELAY = 0.05  # Minimum delay between requests
+MAX_WORKERS = min(mp.cpu_count() * 2, 8)  # Number of worker processes
 
 
 def parse_ingredient(ingredient_text: str) -> dict[str, str]:
