@@ -4,8 +4,14 @@ Script to load cleaned OpenFoodFacts data into SQLite database.
 This script reads the filtered CSV file and populates the database tables.
 """
 
-import sqlite3
+import sys
 from pathlib import Path
+
+# Add project root to sys.path to enable imports
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+import sqlite3
 import pandas as pd
 from tqdm import tqdm
 from database.create_db import create_database
