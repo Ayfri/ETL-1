@@ -6,7 +6,7 @@ This script runs various checks to ensure data quality.
 
 import sqlite3
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any
 import pandas as pd
 
 
@@ -16,9 +16,9 @@ class DatabaseValidator:
     def __init__(self, db_path: str | Path):
         self.db_path = Path(db_path)
         self.conn = None
-        self.errors = []
-        self.warnings = []
-        self.passed_checks = []
+        self.errors: list[str] = []
+        self.warnings: list[str] = []
+        self.passed_checks: list[str] = []
     
     def connect(self):
         """Connect to the database."""
@@ -31,8 +31,10 @@ class DatabaseValidator:
         if self.conn:
             self.conn.close()
     
-    def run_query(self, query: str) -> List[Tuple]:
+    def run_query(self, query: str) -> list[tuple[Any, ...]]:
         """Execute a query and return results."""
+        if not self.conn:
+            raise RuntimeError("Database connection is not established.")
         cursor = self.conn.cursor()
         cursor.execute(query)
         return cursor.fetchall()
@@ -200,7 +202,7 @@ class DatabaseValidator:
         else:
             self.warnings.append(f"⚠ Product count mismatch: CSV has {csv_count}, DB has {db_count}")
     
-    def run_all_checks(self, csv_path: Path = None):
+    def run_all_checks(self, csv_path: Path | None = None):
         """Run all validation checks."""
         print("=" * 60)
         print("OpenFoodFacts Database Integrity Check")

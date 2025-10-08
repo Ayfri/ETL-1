@@ -34,12 +34,12 @@ REQUIRED_COLS_PREFERRED = [
 ]
 
 
-def resolve_columns(df_columns):
+def resolve_columns(df_columns: pd.Index) -> list[str]:
     """Return the list of actual column names to check, mapping tolerant variants.
 
     If a preferred column name is not present but a close alias exists, prefer it.
     """
-    cols = []
+    cols: list[str] = []
     available = set(df_columns)
     for col in REQUIRED_COLS_PREFERRED:
         if col in available:
@@ -77,6 +77,8 @@ def filter_csv(input_path: Path, output_path: Path, chunksize: int = 50_000):
     # Read first chunk to detect column names and resolve variants
     reader = pd.read_csv(input_path, chunksize=chunksize, dtype=str, low_memory=False)
     try:
+        chunk: pd.DataFrame
+        check_cols: list[str] = []
         for chunk_idx, chunk in enumerate(reader):
             if chunk_idx == 0:
                 actual_cols = resolve_columns(chunk.columns)
@@ -95,7 +97,7 @@ def filter_csv(input_path: Path, output_path: Path, chunksize: int = 50_000):
                 chunk[c] = chunk[c].fillna('').str.strip()
 
             # Keep rows where ALL required columns are non-empty
-            mask = None
+            mask: pd.Series[bool] | None = None
             for c in check_cols:
                 if mask is None:
                     mask = chunk[c] != ''
@@ -106,7 +108,7 @@ def filter_csv(input_path: Path, output_path: Path, chunksize: int = 50_000):
             if 'image_url' in chunk.columns:
                 mask &= ~chunk['image_url'].str.startswith('https://images.openfoodfacts.org/images/products/invalid/')
 
-            kept = chunk[mask]
+            kept: pd.Series[bool] = chunk[mask]
             total_out += len(kept)
 
             # write
