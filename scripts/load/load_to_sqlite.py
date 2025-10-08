@@ -182,7 +182,84 @@ def load_data(csv_path: str | Path, db_path: str | Path) -> None:
         cursor.execute("SELECT COUNT(*) FROM nutrition_facts")
         nutrition_count = cursor.fetchone()[0]
         print(f"✓ Inserted {nutrition_count} nutrition fact records")
+
+        # --- Insert ingredients scraped from Marmiton (if available) ---
+        try:
+            project_root = Path(__file__).parent.parent.parent
+            ingredients_csv = project_root / "data" / "raw" / "ingredients_raw.csv"
+            if ingredients_csv.exists():
+                print(f"\nInserting ingredients from {ingredients_csv}...")
+                ing_df = pd.read_csv(ingredients_csv, low_memory=False)
+                ing_df = ing_df.where(pd.notna(ing_df), None)
+
+                for idx, row in tqdm(ing_df.iterrows(), total=len(ing_df), desc="Ingredients"):
+                    name = row.get('name') if 'name' in row.index else None
+                    image_url = None
+                    if 'image_url' in row.index:
+                        image_url = row.get('image_url')
+                    elif 'image' in row.index:
+                        image_url = row.get('image')
+
+                    if not name:
+                        continue
+
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO ingredients (name, image_url, source) VALUES (?, ?, ?)",
+                        (str(name), str(image_url) if image_url is not None else None, 'marmiton')
+                    )
+
+                cursor.execute("SELECT COUNT(*) FROM ingredients")
+                total_ings = cursor.fetchone()[0]
+                print(f"✓ Ingredients table now has {total_ings} rows")
+            else:
+                print(f"\n⚠️  Ingredients CSV not found at {ingredients_csv} - skipping ingredients import")
+        except Exception as e:
+            print(f"Error inserting ingredients: {e}")
         
+        # --- Insert Marmiton recipes (if available) ---
+        try:
+            recipes_csv = project_root / "data" / "raw" / "marmiton_recipes.csv"
+            if recipes_csv.exists():
+                print(f"\nInserting recipes from {recipes_csv}...")
+                recipes_df = pd.read_csv(recipes_csv, low_memory=False)
+                recipes_df = recipes_df.where(pd.notna(recipes_df), None)
+
+                for idx, row in tqdm(recipes_df.iterrows(), total=len(recipes_df), desc="Recipes"):
+                    name = row.get('name') if 'name' in row.index else None
+                    if not name:
+                        continue
+
+                    author_tip = row.get('author_tip') if 'author_tip' in row.index else None
+                    budget = row.get('budget') if 'budget' in row.index else None
+                    cook_time = row.get('cook_time') if 'cook_time' in row.index else None
+                    difficulty = row.get('difficulty') if 'difficulty' in row.index else None
+                    images = row.get('images') if 'images' in row.index else None
+                    ingredients_text = row.get('ingredients') if 'ingredients' in row.index else None
+                    nb_comments = row.get('nb_comments') if 'nb_comments' in row.index else None
+                    prep_time = row.get('prep_time') if 'prep_time' in row.index else None
+                    rate = row.get('rate') if 'rate' in row.index else None
+                    recipe_quantity = row.get('recipe_quantity') if 'recipe_quantity' in row.index else None
+                    steps = row.get('steps') if 'steps' in row.index else None
+                    total_time = row.get('total_time') if 'total_time' in row.index else None
+                    url_val = row.get('url') if 'url' in row.index else None
+                    description = None
+
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO recettes (name, author_tip, budget, cook_time, difficulty, images, ingredients, nb_comments, prep_time, rate, recipe_quantity, steps, total_time, url, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            str(name), author_tip, budget, cook_time, difficulty, images, ingredients_text,
+                            nb_comments, prep_time, rate, recipe_quantity, steps, total_time, url_val, description
+                        )
+                    )
+
+                cursor.execute("SELECT COUNT(*) FROM recettes")
+                total_recipes = cursor.fetchone()[0]
+                print(f"✓ Recettes table now has {total_recipes} rows")
+            else:
+                print(f"\n⚠️  Recettes CSV not found at {recipes_csv} - skipping recipes import")
+        except Exception as e:
+            print(f"Error inserting recipes: {e}")
+
         # Commit transaction
         conn.commit()
         print("\n✓ All data committed successfully!")

@@ -322,3 +322,14 @@ CREATE TABLE IF NOT EXISTS recettes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_recettes_name ON recettes(name);
+
+-- Ingredients table (scraped from Marmiton)
+CREATE TABLE IF NOT EXISTS ingredients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    image_url TEXT,
+    source TEXT, -- e.g. 'marmiton'
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ingredients_name ON ingredients(name);
