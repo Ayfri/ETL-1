@@ -155,8 +155,8 @@
   .meta { display:flex; justify-content:space-between; width:100%; align-items:center }
   .meta-main .name { font-size:1.05rem; display:block }
   .meta-main .desc { color:#586069; font-size:0.92rem; margin-top:0.25rem }
-  .view-btn { background: linear-gradient(90deg,#ff8a00,#ff3b81); color:white; border:none; padding:0.5rem 0.85rem; border-radius:10px; cursor:pointer; font-weight:700; transition:transform 180ms ease, box-shadow 180ms ease }
-  .view-btn:hover { transform:translateY(-3px); box-shadow:0 8px 20px rgba(255,59,129,0.12) }
+  .card-btn { all:unset; display:block; width:100%; text-align:left; cursor:pointer; padding:0; }
+  .card-btn:hover { transform: translateY(-4px); }
   .badge { background:linear-gradient(90deg,#f3f4f6,#fff); padding:0.28rem 0.5rem; border-radius:8px; font-size:0.82rem; color:#374151 }
   .recipes-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:1rem; margin-top:0.5rem }
   .recipe-card { display:flex; flex-direction:column; gap:0.5rem; padding:0; }
@@ -185,22 +185,20 @@
             <div class="recipes-grid">
             {#each $recipes as r}
               <article class="recipe-card card-compact">
-                <img class="recipe-img" src={formatImagesForDisplay(r)} alt={r.name} />
-                <div class="meta">
-                  <div class="meta-main">
-                    <strong class="name">{r.name}</strong>
-                    <div class="desc">{r.description}</div>
-                    <div class="badges">
-                      {#if r.prep_time}<div class="badge">Prépa: {r.prep_time}</div>{/if}
-                      {#if r.cook_time}<div class="badge">Cuisson: {r.cook_time}</div>{/if}
-                      {#if r.total_time}<div class="badge">Total: {r.total_time}</div>{/if}
+                <button class="card-btn" on:click={() => openRecipe(r)} aria-label={`Ouvrir ${r.name}`}>
+                  <img class="recipe-img" src={formatImagesForDisplay(r)} alt={r.name} />
+                  <div class="meta">
+                    <div class="meta-main">
+                      <strong class="name">{r.name}</strong>
+                      <div class="desc">{r.description}</div>
+                      <div class="badges">
+                        {#if r.prep_time}<div class="badge">Prépa: {r.prep_time}</div>{/if}
+                        {#if r.cook_time}<div class="badge">Cuisson: {r.cook_time}</div>{/if}
+                        {#if r.total_time}<div class="badge">Total: {r.total_time}</div>{/if}
+                      </div>
                     </div>
                   </div>
-
-                  <div class="actions">
-                    <button class="view-btn small" on:click={() => openRecipe(r)}>Voir</button>
-                  </div>
-                </div>
+                </button>
               </article>
             {/each}
             </div>
