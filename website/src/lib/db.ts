@@ -119,11 +119,13 @@ export interface Recipe {
 export function queryRecipes({
     page = 1,
     limit = 50,
-    search = ''
+    search = '',
+    ingredient = ''
 }: {
     page?: number;
     limit?: number;
     search?: string;
+    ingredient?: string;
 }): { recipes: Recipe[]; total: number; pages: number } {
     const database = getDatabase();
 
@@ -133,6 +135,12 @@ export function queryRecipes({
     if (search) {
         whereClauses.push('(name LIKE ?)');
         params.push(`%${search}%`);
+    }
+
+    if (ingredient) {
+        // simple substring match on the serialized ingredients field
+        whereClauses.push('(ingredients LIKE ?)');
+        params.push(`%${ingredient}%`);
     }
 
     const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';

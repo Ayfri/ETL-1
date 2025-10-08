@@ -7,8 +7,9 @@ export const GET: RequestHandler = async ({ url }) => {
         const page = parseInt(url.searchParams.get('page') || '1', 10) || 1;
         const limit = parseInt(url.searchParams.get('limit') || '50', 10) || 50;
         const search = url.searchParams.get('search') || '';
+        const ingredient = url.searchParams.get('ingredient') || '';
 
-        const result = queryRecipes({ page, limit, search });
+        const result = queryRecipes({ page, limit, search, ingredient });
 
         return json({ data: result.recipes, total: result.total, page, limit });
     } catch (error) {
