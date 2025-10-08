@@ -2,24 +2,34 @@
 Marmiton ingredients and recipes scraper.
 
 Scrapes ingredients from listing pages, then extracts all recipes that use each ingredient.
-Similar to scrape_marmiton.py but focused on ingredient-based recipe collection.
+Optimized version with asyncio and multiprocessing for maximum speed.
 """
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import json
+import multiprocessing as mp
 import re
 import time
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass
 
-import requests
+import aiohttp
 from bs4 import BeautifulSoup
 
 
 BASE_URL = "https://www.marmiton.org/recettes/index/ingredient"
-OUTPUT_CSV = Path("data/raw/marmiton_recipes_from_ingredients.csv")
+OUTPUT_CSV = Path("data/raw/marmiton_recipes.csv")
+
+# Performance settings
+MAX_CONCURRENT_REQUESTS = 20  # Limit concurrent HTTP requests
+REQUEST_TIMEOUT = 10.0
+RATE_LIMIT_DELAY = 0.1  # Minimum delay between requests
+MAX_WORKERS = min(mp.cpu_count(), 8)  # Number of worker processes
 
 
 def parse_ingredient(ingredient_text: str) -> dict[str, str]:
@@ -96,26 +106,69 @@ def parse_ingredient(ingredient_text: str) -> dict[str, str]:
     return result
 
 
-def extract_recipe_details(url: str) -> dict[str, Any] | None:
+@dataclass
+class RateLimiter:
+    """Simple rate limiter for HTTP requests."""
+    delay: float
+    last_request: float = 0.0
+
+    async def wait(self):
+        """Wait for rate limit."""
+        elapsed = time.time() - self.last_request
+        if elapsed < self.delay:
+            await asyncio.sleep(self.delay - elapsed)
+        self.last_request = time.time()
+
+
+async def fetch_page_async(session: aiohttp.ClientSession, url: str, rate_limiter: RateLimiter, silent_404: bool = False) -> str | None:
     """
-    Extract all recipe details from HTML using JSON-LD structured data.
-    
+    Fetch a page asynchronously with rate limiting.
+
     Args:
+        session: aiohttp session
+        url: URL to fetch
+        rate_limiter: Rate limiter instance
+        silent_404: Whether to silently ignore 404 errors
+
+    Returns:
+        Page content as string or None if failed
+    """
+    await rate_limiter.wait()
+
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)) as response:
+            if response.status == 404 and silent_404:
+                return None
+            response.raise_for_status()
+            return await response.text()
+    except aiohttp.ClientError as e:
+        if not (silent_404 and "404" in str(e)):
+            print(f"Request error for {url}: {e}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error for {url}: {e}")
+        return None
+
+
+async def extract_recipe_details_async(session: aiohttp.ClientSession, url: str, rate_limiter: RateLimiter) -> dict[str, Any] | None:
+    """
+    Extract all recipe details from HTML using JSON-LD structured data asynchronously.
+
+    Args:
+        session: aiohttp session
         url: Recipe URL
-        
+        rate_limiter: Rate limiter instance
+
     Returns:
         Dictionary with recipe details or None if extraction fails
     """
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
-    
+    html = await fetch_page_async(session, url, rate_limiter)
+    if not html:
+        return None
+
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
+        soup = BeautifulSoup(html, 'html.parser')
+
         recipe = {
             'url': url,
             'name': '',
@@ -133,11 +186,11 @@ def extract_recipe_details(url: str) -> dict[str, Any] | None:
             'images': '',
             'tags': '',
         }
-        
+
         # Try to extract from JSON-LD structured data
         json_ld_scripts = soup.find_all('script', type='application/ld+json')
         recipe_data: dict[str, Any] | None = None
-        
+
         for script in json_ld_scripts:
             try:
                 script_content = script.string
@@ -148,18 +201,18 @@ def extract_recipe_details(url: str) -> dict[str, Any] | None:
                         break
             except:
                 continue
-        
+
         if recipe_data:
             # Extract from JSON-LD
             recipe['name'] = str(recipe_data.get('name', ''))
-            
+
             # Rating
             if 'aggregateRating' in recipe_data:
                 rating = recipe_data['aggregateRating']
                 if isinstance(rating, dict):
                     recipe['rate'] = str(rating.get('ratingValue', ''))
                     recipe['nb_comments'] = str(rating.get('ratingCount', ''))
-            
+
             # Times
             prep_time = str(recipe_data.get('prepTime', ''))
             if prep_time:
@@ -173,7 +226,7 @@ def extract_recipe_details(url: str) -> dict[str, Any] | None:
                     if mins:
                         parts.append(f"{mins}min")
                     recipe['prep_time'] = ' '.join(parts) if parts else prep_time
-            
+
             cook_time = str(recipe_data.get('cookTime', ''))
             if cook_time:
                 match = re.search(r'PT(?:(\d+)H)?(?:(\d+)M)?', cook_time)
@@ -185,7 +238,7 @@ def extract_recipe_details(url: str) -> dict[str, Any] | None:
                     if mins:
                         parts.append(f"{mins}min")
                     recipe['cook_time'] = ' '.join(parts) if parts else cook_time
-            
+
             total_time = str(recipe_data.get('totalTime', ''))
             if total_time:
                 match = re.search(r'PT(?:(\d+)H)?(?:(\d+)M)?', total_time)
@@ -197,10 +250,10 @@ def extract_recipe_details(url: str) -> dict[str, Any] | None:
                     if mins:
                         parts.append(f"{mins}min")
                     recipe['total_time'] = ' '.join(parts) if parts else total_time
-            
+
             # Servings
             recipe['recipe_quantity'] = str(recipe_data.get('recipeYield', ''))
-            
+
             # Ingredients
             ingredients_raw = recipe_data.get('recipeIngredient', [])
             if isinstance(ingredients_raw, list):
@@ -208,7 +261,7 @@ def extract_recipe_details(url: str) -> dict[str, Any] | None:
                 # Parse ingredients
                 ingredients_structured = [parse_ingredient(str(ing)) for ing in ingredients_raw]
                 recipe['ingredients_json'] = json.dumps(ingredients_structured, ensure_ascii=False)
-            
+
             # Instructions
             instructions = recipe_data.get('recipeInstructions', [])
             steps: list[str] = []
@@ -220,13 +273,13 @@ def extract_recipe_details(url: str) -> dict[str, Any] | None:
                         step_text = step
                     else:
                         continue
-                        
+
                     if step_text:
                         steps.append(f"{i}. {step_text}")
-            
+
             if steps:
                 recipe['steps'] = ' | '.join(steps)
-            
+
             # Image
             image = recipe_data.get('image')
             if isinstance(image, list) and image:
@@ -235,7 +288,7 @@ def extract_recipe_details(url: str) -> dict[str, Any] | None:
                 recipe['images'] = image
             elif isinstance(image, dict):
                 recipe['images'] = str(image.get('url', ''))
-            
+
             # Categories/Keywords
             keywords = recipe_data.get('keywords', '')
             category = recipe_data.get('recipeCategory', '')
@@ -246,63 +299,38 @@ def extract_recipe_details(url: str) -> dict[str, Any] | None:
                 tags.append(str(category))
             if tags:
                 recipe['tags'] = ' | '.join(tags)
-        
+
         # Fallback to HTML parsing if JSON-LD is incomplete
         if not recipe['name']:
             title = soup.find('h1')
             if title:
                 recipe['name'] = title.get_text(strip=True)
-        
+
         # Verify we have minimum data
         if recipe['name'] and (recipe['ingredients_raw'] or recipe['steps']):
             return recipe
         else:
             return None
-        
+
     except Exception as e:
         return None
 
 
-BASE_URL = "https://www.marmiton.org/recettes/index/ingredient"
-OUTPUT_CSV = Path("data/raw/marmiton_recipes.csv")
-
-
-def fetch_page(url: str, timeout: float = 10.0, silent_404: bool = False) -> requests.Response | None:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
-    try:
-        resp = requests.get(url, headers=headers, timeout=timeout)
-        resp.raise_for_status()
-        return resp
-    except requests.HTTPError as e:
-        # Silently ignore 404 errors during pagination
-        if e.response.status_code == 404 and silent_404:
-            return None
-        if e.response.status_code != 404:
-            print(f"HTTP error for {url}: {e}")
-        return None
-    except requests.RequestException as e:
-        print(f"Request error for {url}: {e}")
-        return None
-    except Exception as e:
-        print(f"Unexpected error for {url}: {e}")
-        return None
-
-
-def parse_ingredients_from_soup(soup: BeautifulSoup) -> list[tuple[str, str, str]]:
+async def parse_ingredients_from_soup_async(html: str) -> list[tuple[str, str, str]]:
     """
-    Parse ingredients from ingredient listing page.
-    
+    Parse ingredients from ingredient listing page HTML.
+
     Extracts ingredients from <a class="card-needed__link"> elements.
-    
+
     Args:
-        soup: BeautifulSoup object of the ingredient listing page
-        
+        html: HTML content of the ingredient listing page
+
     Returns:
         List of tuples (image_url, name, ingredient_page_url)
     """
     results: list[tuple[str, str, str]] = []
+
+    soup = BeautifulSoup(html, "html.parser")
 
     # Find all ingredient cards with class "card-needed__link"
     for a in soup.select("a.card-needed__link"):
@@ -311,7 +339,7 @@ def parse_ingredients_from_soup(soup: BeautifulSoup) -> list[tuple[str, str, str
 
         name = (name_span.get_text(strip=True) if name_span else "").strip()
         image_url = str(img.get("src", "")) if img else ""
-        
+
         # Get the ingredient detail page URL (e.g., /recettes/index/ingredient/beurre)
         ingredient_page_url = str(a.get("href", ""))
         if ingredient_page_url and not ingredient_page_url.startswith("http"):
@@ -323,186 +351,300 @@ def parse_ingredients_from_soup(soup: BeautifulSoup) -> list[tuple[str, str, str
     return results
 
 
-def fetch_recipes_for_ingredient(ingredient_url: str, max_recipes: int = 100, delay: float = 0.3, seen_recipe_urls: set[str] | None = None) -> list[dict[str, Any]]:
+async def fetch_recipes_for_ingredient_async(
+    session: aiohttp.ClientSession,
+    ingredient_url: str,
+    rate_limiter: RateLimiter,
+    max_recipes: int = 100,
+    seen_recipe_urls: set[str] | None = None
+) -> list[dict[str, Any]]:
     """
-    Fetch full recipe details from an ingredient detail page with pagination support.
-    
+    Fetch full recipe details from an ingredient detail page with pagination support asynchronously.
+
     Args:
+        session: aiohttp session
         ingredient_url: URL of the ingredient page
+        rate_limiter: Rate limiter instance
         max_recipes: Maximum number of recipes to fetch
-        delay: Delay between page requests
         seen_recipe_urls: Global set to track already seen recipe URLs
-        
+
     Returns:
         List of recipe dictionaries with full details
     """
     if seen_recipe_urls is None:
         seen_recipe_urls = set()
-        
+
     recipes: list[dict[str, Any]] = []
     page = 1
-    
+
     while len(recipes) < max_recipes:
         # Build paginated URL
         if page == 1:
             url = ingredient_url
         else:
             url = f"{ingredient_url}/{page}"
-        
+
         # Silently ignore 404 errors for pagination (ingredient has fewer pages)
-        resp = fetch_page(url, silent_404=(page > 1))
-        if not resp:
+        html = await fetch_page_async(session, url, rate_limiter, silent_404=(page > 1))
+        if not html:
             break
-        
-        soup = BeautifulSoup(resp.content, "html.parser")
-        
+
+        soup = BeautifulSoup(html, "html.parser")
+
         # Find recipe links on the page
+        recipe_urls: list[str] = []
         links = soup.find_all("a", href=True)
-        
-        found_on_page = 0
+
         for link in links:
             href = str(link.get("href", ""))
-            
+
             # Check if it's a recipe URL (format: /recettes/recette_name_id.aspx)
             if "/recettes/recette_" in href and href.endswith(".aspx"):
                 if href.startswith("/"):
                     href = f"https://www.marmiton.org{href}"
                 elif not href.startswith("http"):
                     continue
-                
+
                 # Skip if we've already seen this recipe URL
                 if href in seen_recipe_urls:
                     continue
-                    
+
                 seen_recipe_urls.add(href)
-                
-                # Extract full recipe details instead of just URL
-                print(f"      → Extracting recipe: {href}", end="", flush=True)
-                recipe_details = extract_recipe_details(href)
-                if recipe_details:
-                    recipes.append(recipe_details)
-                    found_on_page += 1
-                    print(" ✓")
-                else:
-                    print(" ✗")
-                    
-                if len(recipes) >= max_recipes:
-                    break
-        
+                recipe_urls.append(href)
+
+        # Extract recipe details in parallel with semaphore to limit concurrency
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+
+        async def extract_with_semaphore(url: str) -> dict[str, Any] | None:
+            async with semaphore:
+                return await extract_recipe_details_async(session, url, rate_limiter)
+
+        # Process recipes in batches to avoid overwhelming the server
+        batch_size = 10
+        for i in range(0, len(recipe_urls), batch_size):
+            batch_urls = recipe_urls[i:i + batch_size]
+            batch_tasks = [extract_with_semaphore(url) for url in batch_urls]
+            batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+
+            for result in batch_results:
+                if isinstance(result, Exception):
+                    continue  # Skip failed extractions
+                if result:
+                    recipes.append(result)
+                    if len(recipes) >= max_recipes:
+                        break
+
+            if len(recipes) >= max_recipes:
+                break
+
         # If no recipes found on this page, stop pagination
-        if found_on_page == 0:
+        if not recipe_urls:
             break
-        
+
         page += 1
-        
-        # Reduced delay between pages
-        if page > 1:
-            time.sleep(delay)
-    
+
     return recipes
 
 
-def scrape_all_letters(delay: float = 0.4, max_recipes_per_ingredient: int = 100) -> list[tuple[str, str, list[dict[str, Any]]]]:
+async def scrape_ingredient_pages_async(session: aiohttp.ClientSession, rate_limiter: RateLimiter, letter: str, seen_names: set[str]) -> list[tuple[str, str, str]]:
     """
-    Scrape all ingredient listing pages (by letter) and fetch full recipe details for each ingredient.
-    
+    Scrape all ingredient listing pages for a given letter asynchronously.
+
+    Args:
+        session: aiohttp session
+        rate_limiter: Rate limiter instance
+        letter: Letter to scrape (a-z)
+        seen_names: Set of already seen ingredient names
+
+    Returns:
+        List of (image_url, name, ingredient_page_url) tuples
+    """
+    ingredients: list[tuple[str, str, str]] = []
+    page = 1
+
+    while True:
+        # Build URL for ingredient listing page
+        url = f"{BASE_URL}/{letter}"
+        if page > 1:
+            url = f"{url}/{page}"
+
+        print(f"  -> Listing page {page}: {url}")
+        html = await fetch_page_async(session, url, rate_limiter, silent_404=(page > 1))
+        if not html:
+            if page == 1:
+                print(f"     ✗ Page {page} not available")
+            break
+
+        ingredients_on_page = await parse_ingredients_from_soup_async(html)
+
+        if not ingredients_on_page:
+            break
+
+        new_found = 0
+        for image_url, name, ingredient_page_url in ingredients_on_page:
+            key = name.lower()
+            if key not in seen_names:
+                seen_names.add(key)
+                ingredients.append((image_url, name, ingredient_page_url))
+                new_found += 1
+
+        print(f"     + {new_found} new ingredients on page {page}")
+
+        # If no new ingredients found, stop pagination for this letter
+        if new_found == 0:
+            break
+
+        page += 1
+
+    return ingredients
+
+
+def process_ingredient_worker(ingredient_data: tuple[str, str, str], max_recipes: int) -> tuple[str, str, list[dict[str, Any]]]:
+    """
+    Worker function to process a single ingredient (runs in separate process).
+
+    Args:
+        ingredient_data: (image_url, name, ingredient_page_url)
+        max_recipes: Maximum recipes per ingredient
+
+    Returns:
+        (image_url, name, recipes_list)
+    """
+    image_url, name, ingredient_page_url = ingredient_data
+
+    # Create new event loop for this process
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
+    async def process_async():
+        # Shared seen URLs across all ingredients (but not across processes)
+        seen_recipe_urls = set()
+
+        # Create session and rate limiter for this process
+        rate_limiter = RateLimiter(RATE_LIMIT_DELAY)
+        timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
+        connector = aiohttp.TCPConnector(limit=MAX_CONCURRENT_REQUESTS)
+
+        async with aiohttp.ClientSession(
+            timeout=timeout,
+            connector=connector,
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        ) as session:
+            recipes = await fetch_recipes_for_ingredient_async(
+                session, ingredient_page_url, rate_limiter, max_recipes, seen_recipe_urls
+            )
+            return image_url, name, recipes
+
+    return asyncio.run(process_async())
+
+
+async def scrape_all_letters_async(max_recipes_per_ingredient: int = 100) -> list[tuple[str, str, list[dict[str, Any]]]]:
+    """
+    Scrape all ingredient listing pages (by letter) and fetch full recipe details for each ingredient using multiprocessing.
+
     For each letter (a-z):
       1. Visit /recettes/index/ingredient/{letter} (and paginated pages)
       2. Extract ingredient cards with their detail page URLs
-      3. For each ingredient, visit its detail page to get full recipe details
-    
+      3. For each ingredient, fetch full recipe details using multiprocessing
+
     Args:
-        delay: Delay between requests in seconds
         max_recipes_per_ingredient: Maximum recipes to fetch per ingredient
-        
+
     Returns:
         List of tuples (image_url, name, recipes_list)
     """
     all_items: list[tuple[str, str, list[dict[str, Any]]]] = []
     seen_names: set[str] = set()
-    seen_recipe_urls: set[str] = set()  # Global set to avoid duplicate recipes
 
-    letters = [chr(c) for c in range(ord("a"), ord("z") + 1)]
+    # Initialize CSV file with headers
+    OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
+    if OUTPUT_CSV.exists():
+        OUTPUT_CSV.unlink()  # Remove existing file to start fresh
+    
+    # Create file with header
+    with OUTPUT_CSV.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow([
+            "url", "name", "rate", "nb_comments", "difficulty", "budget",
+            "prep_time", "cook_time", "total_time", "recipe_quantity",
+            "ingredients_raw", "ingredients_json", "steps", "images", "tags"
+        ])
 
-    for letter in letters:
-        page = 1
-        print(f"\nScraping letter: {letter.upper()}")
-        
-        while True:
-            # Build URL for ingredient listing page
-            url = f"{BASE_URL}/{letter}"
-            if page > 1:
-                url = f"{url}/{page}"
+    # Create shared rate limiter for ingredient listing
+    rate_limiter = RateLimiter(RATE_LIMIT_DELAY)
+    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
+    connector = aiohttp.TCPConnector(limit=MAX_CONCURRENT_REQUESTS)
 
-            print(f"  -> Listing page {page}: {url}")
-            resp = fetch_page(url, silent_404=(page > 1))
-            if not resp:
-                if page == 1:
-                    print(f"     ✗ Page {page} not available")
-                break
+    async with aiohttp.ClientSession(
+        timeout=timeout,
+        connector=connector,
+        headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    ) as session:
 
-            soup = BeautifulSoup(resp.content, "html.parser")
-            ingredients_on_page = parse_ingredients_from_soup(soup)
+        letters = [chr(c) for c in range(ord("a"), ord("z") + 1)]
 
-            if not ingredients_on_page:
-                break
+        for letter in letters:
+            print(f"\nScraping letter: {letter.upper()}")
 
-            new_found = 0
-            for image_url, name, ingredient_page_url in ingredients_on_page:
-                key = name.lower()
-                if key not in seen_names:
-                    seen_names.add(key)
-                    
-                    # Fetch full recipes from the ingredient's detail page
-                    print(f"     → {name}")
-                    recipes = fetch_recipes_for_ingredient(
-                        ingredient_page_url, 
-                        max_recipes=max_recipes_per_ingredient, 
-                        delay=0.3,
-                        seen_recipe_urls=seen_recipe_urls
-                    )
-                    print(f"       → {len(recipes)} recipes extracted")
-                    
-                    all_items.append((image_url, name, recipes))
-                    new_found += 1
-                    
-                    # Save progress after each ingredient
-                    save_to_csv(all_items, OUTPUT_CSV)
-                    
-                    time.sleep(delay)
+            # Scrape ingredient listing pages for this letter
+            ingredients = await scrape_ingredient_pages_async(session, rate_limiter, letter, seen_names)
 
-            print(f"     + {new_found} new ingredients on page {page}")
+            if not ingredients:
+                continue
 
-            # If no new ingredients found, stop pagination for this letter
-            if new_found == 0:
-                break
+            print(f"  Found {len(ingredients)} ingredients for letter {letter}")
 
-            page += 1
-            time.sleep(delay)
+            # Process ingredients in parallel using multiprocessing
+            # Use ProcessPoolExecutor for CPU-bound recipe processing
+            with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                # Submit all ingredient processing tasks
+                future_to_ingredient = {
+                    executor.submit(process_ingredient_worker, ingredient, max_recipes_per_ingredient): ingredient
+                    for ingredient in ingredients
+                }
 
-    # Final save (in case there were no ingredients processed in the last batch)
-    save_to_csv(all_items, OUTPUT_CSV)
+                # Collect results as they complete
+                for future in future_to_ingredient:
+                    try:
+                        image_url, name, recipes = future.result()
+                        print(f"     ✓ {name}: {len(recipes)} recipes")
+                        all_items.append((image_url, name, recipes))
+
+                        # Save only this ingredient's recipes incrementally
+                        save_to_csv([(image_url, name, recipes)], OUTPUT_CSV, append=True)
+
+                    except Exception as e:
+                        ingredient = future_to_ingredient[future]
+                        print(f"     ✗ Error processing {ingredient[1]}: {e}")
+
     return all_items
 
 
-def save_to_csv(items: list[tuple[str, str, list[dict[str, Any]]]], output: Path) -> None:
+def save_to_csv(items: list[tuple[str, str, list[dict[str, Any]]]], output: Path, append: bool = False) -> None:
     """
     Save full recipe details to CSV.
-    
+
     Args:
         items: List of (image_url, name, recipes_list) tuples
         output: Output CSV file path
+        append: If True, append to existing file. If False, overwrite.
     """
     output.parent.mkdir(parents=True, exist_ok=True)
-    with output.open("w", encoding="utf-8", newline="") as fh:
+    
+    # Determine if we need to write header (new file or overwrite mode)
+    write_header = not append or not output.exists()
+    mode = "a" if append else "w"
+    
+    with output.open(mode, encoding="utf-8", newline="") as fh:
         writer = csv.writer(fh)
-        # Write header row with all recipe fields
-        writer.writerow([
-            "url", "name", "rate", "nb_comments", "difficulty", "budget", 
-            "prep_time", "cook_time", "total_time", "recipe_quantity", 
-            "ingredients_raw", "ingredients_json", "steps", "images", "tags"
-        ])
         
+        # Write header row only if needed
+        if write_header:
+            writer.writerow([
+                "url", "name", "rate", "nb_comments", "difficulty", "budget",
+                "prep_time", "cook_time", "total_time", "recipe_quantity",
+                "ingredients_raw", "ingredients_json", "steps", "images", "tags"
+            ])
+
         for _, _, recipes in items:
             for recipe in recipes:
                 writer.writerow([
@@ -526,15 +668,23 @@ def save_to_csv(items: list[tuple[str, str, list[dict[str, Any]]]], output: Path
 
 def main() -> None:
     """Main entry point."""
-    print("Scraping Marmiton ingredients and extracting full recipe details...")
-    items = scrape_all_letters()
+    print("🚀 Starting optimized Marmiton scraper with asyncio + multiprocessing...")
+    print(f"⚙️  Settings: {MAX_CONCURRENT_REQUESTS} concurrent requests, {MAX_WORKERS} workers, {RATE_LIMIT_DELAY}s delay")
+
+    start_time = time.time()
+
+    # Run the async scraper
+    items = asyncio.run(scrape_all_letters_async())
+
     total_recipes = sum(len(recipes) for _, _, recipes in items)
-    print(f"\n✓ Scraping complete! Processed {len(items)} ingredients")
-    print(f"✓ Extracted {total_recipes} full recipes")
-    print(f"✓ Recipes saved to {OUTPUT_CSV}")
+    elapsed_time = time.time() - start_time
+
+    print("\n✅ Scraping complete!")
+    print(f"📊 Processed {len(items)} ingredients")
+    print(f"🍳 Extracted {total_recipes} full recipes")
+    print(f"⏱️  Time elapsed: {elapsed_time:.2f}s")
+    print(f"💾 Recipes saved to {OUTPUT_CSV}")
 
 
 if __name__ == "__main__":
     main()
-
-
