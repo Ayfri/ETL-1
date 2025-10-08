@@ -8,6 +8,9 @@ let page = 1;
 let total = 0;
 let limit = 48;
 let selectedLetter: string | null = null;
+let query: string = '';
+let debouncedQuery: string = '';
+let searchTimeout: any = null;
 const letters = Array.from({ length: 26 }, (_, i) => String.fromCharCode(97 + i));
 
 // recipes menu state
@@ -69,7 +72,8 @@ function closeRecipesMenu() {
         loadError = null;
         try {
             const letterParam = selectedLetter ? `&letter=${selectedLetter}` : '';
-            const res = await fetch(`/api/ingredients?page=${page}&limit=${limit}${letterParam}`);
+            const queryParam = debouncedQuery ? `&q=${encodeURIComponent(debouncedQuery)}` : '';
+            const res = await fetch(`/api/ingredients?page=${page}&limit=${limit}${letterParam}${queryParam}`);
             if (!res.ok) throw new Error('Failed to fetch');
             const json = await res.json();
             ingredients = json.data || [];
@@ -81,12 +85,26 @@ function closeRecipesMenu() {
     }
 
     onMount(() => loadIngredients());
+
+function onQueryInput(e: Event) {
+    const target = e.currentTarget as HTMLInputElement;
+    query = target.value;
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        debouncedQuery = query.trim();
+        // When searching, behave like "Tous" — clear any selected letter
+        selectedLetter = null;
+        page = 1;
+        loadIngredients();
+    }, 350);
+}
 </script>
 
 <div class="p-6">
     <h1 class="text-2xl font-bold mb-4">Ingrédients</h1>
 
     <div class="mb-4 flex gap-2 items-center">
+        <input placeholder="Rechercher..." class="px-3 py-2 border rounded w-full max-w-sm" value={query} on:input={onQueryInput} />
         <button class="px-2 py-1 rounded bg-gray-100" on:click={() => { selectedLetter = null; page = 1; loadIngredients(); }}>Tous</button>
         {#each letters as l}
             <button class="px-2 py-1 rounded {selectedLetter === l ? 'bg-emerald-500 text-white' : 'bg-white'}" on:click={() => { selectedLetter = l; page = 1; loadIngredients(); }}>{l.toUpperCase()}</button>
@@ -98,10 +116,10 @@ function closeRecipesMenu() {
     {:else}
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {#each ingredients as ing}
-                <div class="bg-white rounded shadow p-2 flex flex-col items-center gap-2 cursor-pointer" role="button" on:click={() => openIngredient(ing.name)}>
+                <button type="button" class="bg-white rounded shadow p-2 flex flex-col items-center gap-2 cursor-pointer" on:click={() => openIngredient(ing.name)}>
                     <img src={ing.image_url || '/favicon.svg'} alt={ing.name} class="w-20 h-20 object-cover rounded" />
                     <div class="text-sm text-center">{ing.name}</div>
-                </div>
+                </button>
             {/each}
         </div>
         <div class="mt-4 flex items-center justify-center gap-2">
@@ -127,9 +145,11 @@ function closeRecipesMenu() {
             {:else}
                 <ul class="space-y-2">
                     {#each recipes as r}
-                        <li class="flex items-center gap-2 p-2 rounded hover:bg-gray-100 cursor-pointer" on:click={() => { selectedRecipe = r; showRecipeModal = true; }}>
-                            <img src={getFirstImageForRecipeLocal(r)} alt={r.name} class="w-12 h-12 object-cover rounded" />
-                            <div class="text-sm">{r.name}</div>
+                        <li>
+                            <button type="button" class="flex items-center gap-2 p-2 rounded hover:bg-gray-100 cursor-pointer w-full text-left" on:click={() => { selectedRecipe = r; showRecipeModal = true; }}>
+                                <img src={getFirstImageForRecipeLocal(r)} alt={r.name} class="w-12 h-12 object-cover rounded" />
+                                <div class="text-sm">{r.name}</div>
+                            </button>
                         </li>
                     {/each}
                 </ul>
