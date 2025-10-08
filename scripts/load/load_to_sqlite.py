@@ -8,6 +8,7 @@ import sqlite3
 from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
+from database.create_db import create_database
 
 
 # Define column mappings for each table
@@ -88,32 +89,30 @@ def normalize_column_name(col: str) -> str:
 def load_data(csv_path: str | Path, db_path: str | Path) -> None:
     """
     Load data from CSV into SQLite database.
-    
+
     Args:
         csv_path: Path to the filtered CSV file
         db_path: Path to the SQLite database
     """
     csv_path = Path(csv_path)
     db_path = Path(db_path)
-    
+
     # Check if files exist
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV file not found: {csv_path}")
-    if not db_path.exists():
-        raise FileNotFoundError(f"Database not found: {db_path}. Run create_db.py first.")
-    
+
     print(f"Loading data from {csv_path}...")
     df = pd.read_csv(csv_path, low_memory=False)
     print(f"✓ Loaded {len(df)} rows with {len(df.columns)} columns")
-    
+
     # Connect to database
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     try:
         # Start transaction
         cursor.execute("BEGIN TRANSACTION")
-        
+
         # Insert products
         print("\nInserting products...")
 
@@ -130,22 +129,22 @@ def load_data(csv_path: str | Path, db_path: str | Path) -> None:
 
         # Rename columns to match database schema
         products_data.columns = [normalize_column_name(col) for col in products_data.columns]
-        
+
         # Ensure code is string (not float)
         products_data['code'] = products_data['code'].astype(str)
-        
+
         # Replace NaN with None for proper NULL handling
         products_data = products_data.where(pd.notna(products_data), None)
-        
+
         # Insert products
         for idx, row in tqdm(products_data.iterrows(), total=len(products_data), desc="Products"):
             placeholders = ','.join(['?' for _ in row])
             columns = ','.join(row.index)
             sql = f"INSERT OR REPLACE INTO products ({columns}) VALUES ({placeholders})"
             cursor.execute(sql, tuple(row))
-        
+
         print(f"✓ Inserted {len(products_data)} products")
-        
+
         # Insert nutrition facts
         print("\nInserting nutrition facts...")
 
@@ -160,24 +159,24 @@ def load_data(csv_path: str | Path, db_path: str | Path) -> None:
 
         # Rename columns
         nutrition_data.columns = ['product_code'] + [normalize_column_name(col) for col in present_nutrition_cols]
-        
+
         # Ensure product_code is string (not float)
         nutrition_data['product_code'] = nutrition_data['product_code'].astype(str)
-        
+
         # Replace NaN with None
         nutrition_data = nutrition_data.where(pd.notna(nutrition_data), None)
-        
+
         # Insert nutrition facts
         for idx, row in tqdm(nutrition_data.iterrows(), total=len(nutrition_data), desc="Nutrition"):
             # Skip if all nutrition values are None
             if all(v is None for k, v in row.items() if k != 'product_code'):
                 continue
-            
+
             placeholders = ','.join(['?' for _ in row])
             columns = ','.join(row.index)
             sql = f"INSERT INTO nutrition_facts ({columns}) VALUES ({placeholders})"
             cursor.execute(sql, tuple(row))
-        
+
         # Get count of inserted nutrition facts
         cursor.execute("SELECT COUNT(*) FROM nutrition_facts")
         nutrition_count = cursor.fetchone()[0]
@@ -215,10 +214,10 @@ def load_data(csv_path: str | Path, db_path: str | Path) -> None:
                 print(f"\n⚠️  Ingredients CSV not found at {ingredients_csv} - skipping ingredients import")
         except Exception as e:
             print(f"Error inserting ingredients: {e}")
-        
+
         # --- Insert Marmiton recipes (if available) ---
         try:
-            recipes_csv = project_root / "data" / "raw" / "marmiton_recipes.csv"
+            recipes_csv = project_root / "data" / "processed" / "marmiton_recipes_filtered.csv"
             if recipes_csv.exists():
                 print(f"\nInserting recipes from {recipes_csv}...")
                 recipes_df = pd.read_csv(recipes_csv, low_memory=False)
@@ -241,7 +240,7 @@ def load_data(csv_path: str | Path, db_path: str | Path) -> None:
                     total_time = row.get('total_time') if 'total_time' in row.index else None
                     recipe_quantity = row.get('recipe_quantity') if 'recipe_quantity' in row.index else None
                     images = row.get('images') if 'images' in row.index else None
-                    ingredients_raw = row.get('ingredients') if 'ingredients' in row.index else None
+                    ingredients_raw = row.get('ingredients_raw') if 'ingredients_raw' in row.index else None
                     steps = row.get('steps') if 'steps' in row.index else None
                     author_tip = row.get('author_tip') if 'author_tip' in row.index else None
                     description = row.get('description') if 'description' in row.index else None
@@ -279,27 +278,27 @@ def load_data(csv_path: str | Path, db_path: str | Path) -> None:
         # Commit transaction
         conn.commit()
         print("\n✓ All data committed successfully!")
-        
+
         # Display statistics
         print("\n" + "=" * 60)
         print("Database Statistics:")
         print("=" * 60)
-        
+
         cursor.execute("SELECT COUNT(*) FROM products")
         print(f"Total products: {cursor.fetchone()[0]}")
-        
+
         cursor.execute("SELECT COUNT(*) FROM nutrition_facts")
         print(f"Total nutrition records: {cursor.fetchone()[0]}")
-        
+
         cursor.execute("SELECT COUNT(*) FROM products WHERE nutriscore_grade IS NOT NULL")
         print(f"Products with Nutri-Score: {cursor.fetchone()[0]}")
-        
+
         cursor.execute("SELECT COUNT(*) FROM products WHERE nova_group IS NOT NULL")
         print(f"Products with NOVA group: {cursor.fetchone()[0]}")
-        
+
         cursor.execute("SELECT COUNT(*) FROM products WHERE completeness >= 0.8")
         print(f"High quality products (≥80% complete): {cursor.fetchone()[0]}")
-        
+
         cursor.execute("""
             SELECT nutriscore_grade, COUNT(*) 
             FROM products 
@@ -310,7 +309,7 @@ def load_data(csv_path: str | Path, db_path: str | Path) -> None:
         print("\nNutri-Score distribution:")
         for grade, count in cursor.fetchall():
             print(f"  Grade {grade}: {count} products")
-        
+
     except Exception as e:
         conn.rollback()
         print(f"\n✗ Error loading data: {e}")
@@ -324,13 +323,22 @@ def main():
     project_root = Path(__file__).parent.parent.parent
     csv_path = project_root / "data" / "processed" / "openfoodfacts_filtered.csv"
     db_path = project_root / "database" / "openfoodfacts.db"
-    
+
     print("=" * 60)
     print("OpenFoodFacts Data Loading")
     print("=" * 60)
-    
+
+    # Delete existing database if it exists
+    if db_path.exists():
+        db_path.unlink()
+        print("Existing database deleted.")
+
+    # Recreate the database
+    schema_path = project_root / "database" / "schema.sql"
+    create_database(db_path, schema_path)
+
     load_data(csv_path, db_path)
-    
+
     print("\n" + "=" * 60)
     print("Data loading completed!")
     print(f"Database location: {db_path}")
