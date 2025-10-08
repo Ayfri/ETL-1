@@ -1,17 +1,40 @@
 <script lang="ts">
 	import AddRecipeModal from '$lib/components/AddRecipeModal.svelte';
 	import RecipeModal from '$lib/components/RecipeModal.svelte';
-	import {ChevronLeft, ChevronRight} from '@lucide/svelte';
+	import {ChevronLeft, ChevronRight, ArrowUp, ArrowDown, BookOpen, Filter, ArrowUpDown} from '@lucide/svelte';
 	import {onMount} from 'svelte';
 	import {writable} from 'svelte/store';
+	import type { Recipe } from '$lib/db';
 
-	const recipes = writable([] as any[]);
+	const recipes = writable([] as Recipe[]);
 	const loading = writable(true);
 
 	let currentPage = $state(1);
 	let totalRecipes = $state(0);
 	let totalPages = $state(0);
 	const limit = 20;
+
+	// Filtres
+	let selectedDifficulties = $state<Set<string>>(new Set());
+	let selectedBudgets = $state<Set<string>>(new Set());
+	const difficulties = ['Facile', 'Moyen', 'Difficile'];
+	const budgets = ['Bon marché', 'Coût moyen', 'Cher'];
+
+	// Tri
+	let sortBy = $state<string>('created_at');
+	let sortOrder = $state<'asc' | 'desc'>('desc');
+
+	const sortOptions = [
+		{ value: 'name', label: 'Nom' },
+		{ value: 'prep_time', label: 'Temps de préparation' },
+		{ value: 'cook_time', label: 'Temps de cuisson' },
+		{ value: 'total_time', label: 'Temps total' },
+		{ value: 'rate', label: 'Note' },
+		{ value: 'nb_comments', label: 'Commentaires' },
+		{ value: 'created_at', label: 'Date de création' }
+	];
+
+	let loadTimeout: number | null = null;
 
 	let name = $state('');
 	let authorTip = $state('');
@@ -30,10 +53,10 @@
 	let description = $state('');
 
 	let modalOpen = $state(false);
-	let selectedRecipe = $state<any>(null);
+	let selectedRecipe = $state<Recipe | null>(null);
 	let addModalOpen = $state(false);
 
-	function openRecipe(recipe: any) {
+	function openRecipe(recipe: Recipe) {
 		selectedRecipe = recipe;
 		modalOpen = true;
 	}
@@ -51,10 +74,25 @@
 		addModalOpen = false;
 	}
 
+	function prevPage() {
+		if (currentPage > 1) {
+			loadRecipes(currentPage - 1);
+		}
+	}
+
+	function nextPage() {
+		if (currentPage < totalPages) {
+			loadRecipes(currentPage + 1);
+		}
+	}
+
 	async function loadRecipes(page = 1) {
 		loading.set(true);
 		try {
-			const res = await fetch(`/api/recipes?page=${page}&limit=${limit}`);
+			const difficultyParam = selectedDifficulties.size > 0 ? `&difficulty=${Array.from(selectedDifficulties).join(',')}` : '';
+			const budgetParam = selectedBudgets.size > 0 ? `&budget=${Array.from(selectedBudgets).join(',')}` : '';
+			const sortParam = `&sort=${sortBy}&order=${sortOrder}`;
+			const res = await fetch(`/api/recipes?page=${page}&limit=${limit}${difficultyParam}${budgetParam}${sortParam}`);
 			const data = await res.json();
 			recipes.set(data.data || []);
 			totalRecipes = data.total || 0;
@@ -67,35 +105,44 @@
 		}
 	}
 
-	function nextPage() {
-		if (currentPage < totalPages) {
-			loadRecipes(currentPage + 1);
-		}
+	function debouncedLoadRecipes() {
+		if (loadTimeout) clearTimeout(loadTimeout);
+		loadTimeout = setTimeout(() => {
+			loadRecipes();
+		}, 300); // 300ms debounce
 	}
 
-	function prevPage() {
-		if (currentPage > 1) {
-			loadRecipes(currentPage - 1);
+	function toggleDifficulty(difficulty: string) {
+		if (selectedDifficulties.has(difficulty)) {
+			selectedDifficulties.delete(difficulty);
+		} else {
+			selectedDifficulties.add(difficulty);
 		}
+		selectedDifficulties = new Set(selectedDifficulties); // trigger reactivity
+		currentPage = 1; // reset to first page
+		debouncedLoadRecipes();
 	}
 
-	function parseListField(field: any): string[] {
-		if (!field) return [];
-		if (typeof field === 'string') {
-			try {
-				const parsed = JSON.parse(field);
-				if (Array.isArray(parsed)) return parsed;
-			} catch {
-			}
-			return field.split('\n').map(s => s.trim()).filter(Boolean);
+	function toggleBudget(budget: string) {
+		if (selectedBudgets.has(budget)) {
+			selectedBudgets.delete(budget);
+		} else {
+			selectedBudgets.add(budget);
 		}
-		if (Array.isArray(field)) return field;
-		return [];
+		selectedBudgets = new Set(selectedBudgets); // trigger reactivity
+		currentPage = 1; // reset to first page
+		debouncedLoadRecipes();
 	}
 
-	function formatImagesForDisplay(recipe: any) {
-		const imgs = parseListField(recipe.images || recipe.image_url || '');
-		return imgs.length ? imgs[0] : '';
+	function changeSort(newSortBy: string) {
+		if (sortBy === newSortBy) {
+			sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortBy = newSortBy;
+			sortOrder = 'asc';
+		}
+		currentPage = 1; // reset to first page
+		debouncedLoadRecipes();
 	}
 
 	async function submitRecipe() {
@@ -162,6 +209,25 @@
 		}
 	}
 
+	function parseListField(field: unknown): string[] {
+		if (field == null) return [];
+		if (typeof field === 'string') {
+			try {
+				const parsed = JSON.parse(field);
+				if (Array.isArray(parsed)) return parsed;
+			} catch {
+			}
+			return field.split('\n').map(s => s.trim()).filter(Boolean);
+		}
+		if (Array.isArray(field)) return field;
+		return [];
+	}
+
+	function formatImagesForDisplay(recipe: Recipe) {
+		const imgs = parseListField(recipe.images || '');
+		return imgs.length ? imgs[0] : '';
+	}
+
 	onMount(loadRecipes);
 </script>
 
@@ -173,6 +239,69 @@
 			onclick={openAddModal}
 		>Add Recipe
 		</button>
+	</div>
+
+	<!-- Filters and Controls -->
+	<div class="mb-8 space-y-6">
+		<!-- Filters -->
+		<div>
+			<div class="flex items-center gap-2 mb-4">
+				<Filter size={20} class="text-gray-600" />
+				<h2 class="text-xl font-semibold text-gray-800">Filtres</h2>
+			</div>
+			<div class="flex flex-wrap gap-2">
+				{#each difficulties as diff}
+					<button
+						class="cursor-pointer px-3 py-1 rounded-full text-sm font-medium transition-all {selectedDifficulties.has(diff)
+							? 'bg-orange-500 text-white shadow-md'
+							: 'bg-white text-gray-700 border border-gray-300 hover:border-orange-400 hover:bg-orange-50'}"
+						onclick={() => toggleDifficulty(diff)}
+					>
+						{diff}
+					</button>
+				{/each}
+				{#each budgets as budg}
+					<button
+						class="cursor-pointer px-3 py-1 rounded-full text-sm font-medium transition-all {selectedBudgets.has(budg)
+							? 'bg-orange-500 text-white shadow-md'
+							: 'bg-white text-gray-700 border border-gray-300 hover:border-orange-400 hover:bg-orange-50'}"
+						onclick={() => toggleBudget(budg)}
+					>
+						{budg}
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		<!-- Sort and Pagination Controls -->
+		<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+			<!-- Sort Controls -->
+			<div class="flex items-center gap-4">
+				<div class="flex items-center gap-2">
+					<ArrowUpDown size={16} class="text-gray-600" />
+					<span class="text-sm font-medium text-gray-700">Trier par:</span>
+				</div>
+				<div class="flex gap-2">
+					{#each sortOptions as option}
+						<button
+							class="cursor-pointer px-3 py-1 text-sm rounded-md transition-all flex items-center gap-1 {sortBy === option.value
+								? 'bg-orange-500 text-white'
+								: 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
+							onclick={() => changeSort(option.value)}
+						>
+							<span>{option.label}</span>
+							{#if sortBy === option.value}
+								{#if sortOrder === 'asc'}
+									<ArrowUp size={14} />
+								{:else}
+									<ArrowDown size={14} />
+								{/if}
+							{/if}
+						</button>
+					{/each}
+				</div>
+			</div>
+		</div>
 	</div>
 
 
@@ -204,6 +333,10 @@
 			>
 				<ChevronRight size={16}/>
 			</button>
+
+			<div class="text-sm text-gray-600 ml-4">
+				{$recipes.length} recipes displayed out of {totalRecipes} total
+			</div>
 		</div>
 	{/if}
 
@@ -253,10 +386,6 @@
 									</button>
 								</article>
 							{/each}
-						</div>
-
-						<div class="text-sm text-gray-600 mt-4">
-							{$recipes.length} recipes displayed out of {totalRecipes} total
 						</div>
 					{/if}
 				{/if}

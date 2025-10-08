@@ -121,12 +121,20 @@ export function queryRecipes({
     page = 1,
     limit = 50,
     search = '',
-    ingredient = ''
+    ingredient = '',
+    sortBy = 'created_at',
+    sortOrder = 'desc',
+    difficulty = [] as string[],
+    budget = [] as string[]
 }: {
     page?: number;
     limit?: number;
     search?: string;
     ingredient?: string;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    difficulty?: string[];
+    budget?: string[];
 }): { recipes: Recipe[]; total: number; pages: number } {
     const database = getDatabase();
 
@@ -144,6 +152,18 @@ export function queryRecipes({
         params.push(`%${ingredient}%`);
     }
 
+    if (difficulty.length > 0) {
+        const placeholders = difficulty.map(() => '?').join(',');
+        whereClauses.push(`difficulty IN (${placeholders})`);
+        params.push(...difficulty);
+    }
+
+    if (budget.length > 0) {
+        const placeholders = budget.map(() => '?').join(',');
+        whereClauses.push(`budget IN (${placeholders})`);
+        params.push(...budget);
+    }
+
     const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
     const countQuery = `SELECT COUNT(*) as total FROM recipes ${whereClause}`;
@@ -151,10 +171,11 @@ export function queryRecipes({
     const total = countResult.total;
 
     const offset = (page - 1) * limit;
+    const orderClause = `ORDER BY ${sortBy} ${sortOrder.toUpperCase()}`;
     const query = `
         SELECT * FROM recipes
         ${whereClause}
-        ORDER BY created_at DESC
+        ${orderClause}
         LIMIT ? OFFSET ?
     `;
 

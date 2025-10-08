@@ -8,8 +8,15 @@ export const GET: RequestHandler = async ({ url }) => {
         const limit = parseInt(url.searchParams.get('limit') || '50', 10) || 50;
         const search = url.searchParams.get('search') || '';
         const ingredient = url.searchParams.get('ingredient') || '';
+        const sortBy = url.searchParams.get('sort') || 'created_at';
+        const sortOrder = (url.searchParams.get('order') || 'desc') as 'asc' | 'desc';
+        const difficultyParam = url.searchParams.get('difficulty') || '';
+        const budgetParam = url.searchParams.get('budget') || '';
 
-        const result = queryRecipes({ page, limit, search, ingredient });
+        const difficulty = difficultyParam ? difficultyParam.split(',').filter(Boolean) : [];
+        const budget = budgetParam ? budgetParam.split(',').filter(Boolean) : [];
+
+        const result = queryRecipes({ page, limit, search, ingredient, sortBy, sortOrder, difficulty, budget });
 
         return json({ data: result.recipes, total: result.total, pages: result.pages, page, limit });
     } catch (error) {
