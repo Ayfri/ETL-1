@@ -117,7 +117,26 @@ function onQueryInput(e: Event) {
                 </div>
             </div>
 
-            <!-- removed letter buttons: search-only UI -->
+            <div class="flex items-center">
+                <div class="bg-white/80 backdrop-blur-sm rounded-lg px-4 py-2 shadow-sm flex items-center gap-3">
+                    <button type="button" class="px-3 py-1 bg-white border border-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50" on:click={() => { if (page > 1) { page -= 1; loadIngredients(); } }} disabled={page <= 1}>Préc</button>
+
+                    <div class="flex items-center gap-2 text-sm text-gray-700">
+                        <span>Page</span>
+                        <input
+                            type="number"
+                            min="1"
+                            max={Math.max(1, Math.ceil(total / limit))}
+                            value={page}
+                            on:change={(e) => { page = parseInt((e.target as HTMLInputElement).value) || 1; loadIngredients(); }}
+                            class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
+                        />
+                        <span>sur {Math.max(1, Math.ceil(total / limit))}</span>
+                    </div>
+
+                    <button type="button" class="px-3 py-1 bg-white border border-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50" on:click={() => { if (page < Math.max(1, Math.ceil(total / limit))) { page += 1; loadIngredients(); } }} disabled={page >= Math.max(1, Math.ceil(total / limit))}>Suiv</button>
+                </div>
+            </div>
         </div>
 
     {#if loadError}
@@ -134,11 +153,6 @@ function onQueryInput(e: Event) {
                     <div class="text-sm text-center text-gray-800">{ing.name}</div>
                 </button>
             {/each}
-        </div>
-        <div class="mt-6 flex items-center justify-center gap-2">
-            <button class="px-3 py-1 bg-white border border-gray-200 rounded shadow-sm hover:bg-gray-50" on:click={() => { if (page > 1) { page -= 1; loadIngredients(); } }} disabled={page <= 1}>Préc</button>
-            <div class="text-sm text-gray-700">Page {page} / {Math.max(1, Math.ceil(total / limit))}</div>
-            <button class="px-3 py-1 bg-white border border-gray-200 rounded shadow-sm hover:bg-gray-50" on:click={() => { if (page < Math.max(1, Math.ceil(total / limit))) { page += 1; loadIngredients(); } }} disabled={page >= Math.max(1, Math.ceil(total / limit))}>Suiv</button>
         </div>
     {/if}
 
