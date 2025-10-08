@@ -226,37 +226,53 @@ def load_data(csv_path: str | Path, db_path: str | Path) -> None:
 
                 for idx, row in tqdm(recipes_df.iterrows(), total=len(recipes_df), desc="Recipes"):
                     name = row.get('name') if 'name' in row.index else None
-                    if not name:
+                    url_val = row.get('url') if 'url' in row.index else None
+
+                    # Skip recipes without a URL because `url` is NOT NULL and UNIQUE in the schema
+                    if not url_val:
                         continue
 
-                    author_tip = row.get('author_tip') if 'author_tip' in row.index else None
-                    budget = row.get('budget') if 'budget' in row.index else None
-                    cook_time = row.get('cook_time') if 'cook_time' in row.index else None
-                    difficulty = row.get('difficulty') if 'difficulty' in row.index else None
-                    images = row.get('images') if 'images' in row.index else None
-                    ingredients_text = row.get('ingredients') if 'ingredients' in row.index else None
-                    nb_comments = row.get('nb_comments') if 'nb_comments' in row.index else None
-                    prep_time = row.get('prep_time') if 'prep_time' in row.index else None
                     rate = row.get('rate') if 'rate' in row.index else None
-                    recipe_quantity = row.get('recipe_quantity') if 'recipe_quantity' in row.index else None
-                    steps = row.get('steps') if 'steps' in row.index else None
+                    nb_comments = row.get('nb_comments') if 'nb_comments' in row.index else None
+                    difficulty = row.get('difficulty') if 'difficulty' in row.index else None
+                    budget = row.get('budget') if 'budget' in row.index else None
+                    prep_time = row.get('prep_time') if 'prep_time' in row.index else None
+                    cook_time = row.get('cook_time') if 'cook_time' in row.index else None
                     total_time = row.get('total_time') if 'total_time' in row.index else None
-                    url_val = row.get('url') if 'url' in row.index else None
-                    description = None
+                    recipe_quantity = row.get('recipe_quantity') if 'recipe_quantity' in row.index else None
+                    images = row.get('images') if 'images' in row.index else None
+                    ingredients_raw = row.get('ingredients') if 'ingredients' in row.index else None
+                    steps = row.get('steps') if 'steps' in row.index else None
+                    author_tip = row.get('author_tip') if 'author_tip' in row.index else None
+                    description = row.get('description') if 'description' in row.index else None
 
                     cursor.execute(
-                        "INSERT OR REPLACE INTO recettes (name, author_tip, budget, cook_time, difficulty, images, ingredients, nb_comments, prep_time, rate, recipe_quantity, steps, total_time, url, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT OR REPLACE INTO recipes (name, url, rate, nb_comments, difficulty, budget, prep_time, cook_time, total_time, recipe_quantity, ingredients_raw, steps, images, author_tip, description, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
-                            str(name), author_tip, budget, cook_time, difficulty, images, ingredients_text,
-                            nb_comments, prep_time, rate, recipe_quantity, steps, total_time, url_val, description
+                            str(name) if name is not None else None,
+                            str(url_val),
+                            rate,
+                            nb_comments,
+                            difficulty,
+                            budget,
+                            prep_time,
+                            cook_time,
+                            total_time,
+                            recipe_quantity,
+                            ingredients_raw,
+                            steps,
+                            images,
+                            author_tip,
+                            description,
+                            'marmiton'
                         )
                     )
 
-                cursor.execute("SELECT COUNT(*) FROM recettes")
+                cursor.execute("SELECT COUNT(*) FROM recipes")
                 total_recipes = cursor.fetchone()[0]
-                print(f"✓ Recettes table now has {total_recipes} rows")
+                print(f"✓ Recipes table now has {total_recipes} rows")
             else:
-                print(f"\n⚠️  Recettes CSV not found at {recipes_csv} - skipping recipes import")
+                print(f"\n⚠️  Recipes CSV not found at {recipes_csv} - skipping recipes import")
         except Exception as e:
             print(f"Error inserting recipes: {e}")
 
