@@ -122,8 +122,8 @@ export function queryRecipes({
     limit = 50,
     search = '',
     ingredient = '',
-    sortBy = 'created_at',
-    sortOrder = 'desc',
+    sortBy = 'name',
+    sortOrder = 'asc',
     difficulty = [] as string[],
     budget = [] as string[]
 }: {

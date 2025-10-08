@@ -21,8 +21,8 @@
 	const budgets = ['Bon marché', 'Coût moyen', 'Cher'];
 
 	// Tri
-	let sortBy = $state<string>('created_at');
-	let sortOrder = $state<'asc' | 'desc'>('desc');
+	let sortBy = $state<string>('name');
+	let sortOrder = $state<'asc' | 'desc'>('asc');
 
 	const sortOptions = [
 		{ value: 'name', label: 'Nom' },
