@@ -278,7 +278,7 @@ CREATE INDEX IF NOT EXISTS idx_nutrition_product_code ON nutrition_facts(product
 
 -- Views for common queries
 CREATE VIEW IF NOT EXISTS products_with_nutrition AS
-SELECT 
+SELECT
     p.*,
     n.energy_kcal_100g,
     n.fat_100g,
@@ -289,7 +289,21 @@ SELECT
     n.salt_100g,
     n.fiber_100g
 FROM products p
-LEFT JOIN nutrition_facts n ON p.code = n.product_code;
+LEFT JOIN (
+    -- Ensure one nutrition row per product_code to avoid duplicating products
+    SELECT
+        product_code,
+        MAX(energy_kcal_100g) AS energy_kcal_100g,
+        MAX(fat_100g) AS fat_100g,
+        MAX(saturated_fat_100g) AS saturated_fat_100g,
+        MAX(carbohydrates_100g) AS carbohydrates_100g,
+        MAX(sugars_100g) AS sugars_100g,
+        MAX(proteins_100g) AS proteins_100g,
+        MAX(salt_100g) AS salt_100g,
+        MAX(fiber_100g) AS fiber_100g
+    FROM nutrition_facts
+    GROUP BY product_code
+) n ON p.code = n.product_code;
 
 CREATE VIEW IF NOT EXISTS high_quality_products AS
 SELECT *
