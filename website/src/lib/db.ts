@@ -171,7 +171,14 @@ export function queryRecipes({
     const total = countResult.total;
 
     const offset = (page - 1) * limit;
-    const orderClause = `ORDER BY ${sortBy} ${sortOrder.toUpperCase()}`;
+    // Handle sorting for numeric vs string fields
+    const numericFields = ['rate', 'nb_comments', 'prep_time', 'cook_time', 'total_time'];
+    let orderClause: string;
+    if (numericFields.includes(sortBy)) {
+        orderClause = `ORDER BY CAST(${sortBy} AS REAL) ${sortOrder.toUpperCase()}`;
+    } else {
+        orderClause = `ORDER BY ${sortBy} ${sortOrder.toUpperCase()}`;
+    }
     const query = `
         SELECT * FROM recipes
         ${whereClause}
