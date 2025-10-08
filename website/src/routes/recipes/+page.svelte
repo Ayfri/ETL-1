@@ -2,47 +2,39 @@
 	import AddRecipeModal from '$lib/components/AddRecipeModal.svelte';
 	import RecipeModal from '$lib/components/RecipeModal.svelte';
 	import type {Recipe} from '$lib/db';
-	import {ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Filter} from '@lucide/svelte';
+	import {ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Search} from '@lucide/svelte';
 	import {onMount} from 'svelte';
 	import {writable} from 'svelte/store';
+	import { fly } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
 
-import { fly } from 'svelte/transition';
-import { flip } from 'svelte/animate';
-
-const appearDelayBase = 35;
-function computeDelay(index: number) {
-    return index * appearDelayBase;
-}
-
-const recipes = writable([] as Recipe[]);
-const loading = writable(true);
+	const recipes = writable([] as Recipe[]);
+	const loading = writable(true);
 
 	let currentPage = $state(1);
 	let totalRecipes = $state(0);
 	let totalPages = $state(0);
 	const limit = 20;
 
-	// Filtres
-	let selectedDifficulties = $state<Set<string>>(new Set());
-	let selectedBudgets = $state<Set<string>>(new Set());
-	const difficulties = ['Facile', 'Moyen', 'Difficile'];
-	const budgets = ['Bon marché', 'Coût moyen', 'Cher'];
+	let query: string = $state('');
+	let debouncedQuery: string = '';
+	let searchTimeout: any = null;
 
 	// Tri
 	let sortBy = $state<string>('name');
 	let sortOrder = $state<'asc' | 'desc'>('asc');
 
 	const sortOptions = [
-		{value: 'name', label: 'Nom'},
-		{value: 'prep_time', label: 'Temps de préparation'},
 		{value: 'cook_time', label: 'Temps de cuisson'},
-		{value: 'total_time', label: 'Temps total'},
-		{value: 'rate', label: 'Note'},
+		{value: 'created_at', label: 'Date de création'},
+		{value: 'name', label: 'Nom'},
 		{value: 'nb_comments', label: 'Commentaires'},
-		{value: 'created_at', label: 'Date de création'}
-	];
+		{value: 'prep_time', label: 'Temps de préparation'},
+		{value: 'rate', label: 'Note'},
+		{value: 'total_time', label: 'Temps total'},
+	] as const;
 
-let loadTimeout: ReturnType<typeof setTimeout> | null = null;
+	let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	let name = $state('');
 	let authorTip = $state('');
@@ -97,10 +89,9 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 	async function loadRecipes(page = 1) {
 		loading.set(true);
 		try {
-			const difficultyParam = selectedDifficulties.size > 0 ? `&difficulty=${Array.from(selectedDifficulties).join(',')}` : '';
-			const budgetParam = selectedBudgets.size > 0 ? `&budget=${Array.from(selectedBudgets).join(',')}` : '';
+			const queryParam = debouncedQuery ? `&search=${encodeURIComponent(debouncedQuery)}` : '';
 			const sortParam = `&sort=${sortBy}&order=${sortOrder}`;
-			const res = await fetch(`/api/recipes?page=${page}&limit=${limit}${difficultyParam}${budgetParam}${sortParam}`);
+			const res = await fetch(`/api/recipes?page=${page}&limit=${limit}${queryParam}${sortParam}`);
 			const data = await res.json();
 			recipes.set(data.data || []);
 			totalRecipes = data.total || 0;
@@ -120,28 +111,6 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 		}, 300); // 300ms debounce
 	}
 
-	function toggleDifficulty(difficulty: string) {
-		if (selectedDifficulties.has(difficulty)) {
-			selectedDifficulties.delete(difficulty);
-		} else {
-			selectedDifficulties.add(difficulty);
-		}
-		selectedDifficulties = new Set(selectedDifficulties); // trigger reactivity
-		currentPage = 1; // reset to first page
-		debouncedLoadRecipes();
-	}
-
-	function toggleBudget(budget: string) {
-		if (selectedBudgets.has(budget)) {
-			selectedBudgets.delete(budget);
-		} else {
-			selectedBudgets.add(budget);
-		}
-		selectedBudgets = new Set(selectedBudgets); // trigger reactivity
-		currentPage = 1; // reset to first page
-		debouncedLoadRecipes();
-	}
-
 	function changeSort(newSortBy: string) {
 		if (sortBy === newSortBy) {
 			sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
@@ -151,6 +120,17 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 		}
 		currentPage = 1; // reset to first page
 		debouncedLoadRecipes();
+	}
+
+	function onQueryInput(e: Event) {
+		const target = e.currentTarget as HTMLInputElement;
+		query = target.value;
+		if (searchTimeout) clearTimeout(searchTimeout);
+		searchTimeout = setTimeout(() => {
+			debouncedQuery = query.trim();
+			currentPage = 1;
+			loadRecipes();
+		}, 350);
 	}
 
 	async function submitRecipe() {
@@ -264,7 +244,7 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
                         <span class="inline-block w-2 h-8 bg-emerald-500 rounded"></span>
                         Recettes
                     </h1>
-                    <p class="text-sm text-gray-600 mt-1">Parcourez et filtrez les recettes — cliquez sur une carte pour voir les détails.</p>
+                    <p class="text-sm text-gray-600 mt-1">Parcourez et cherchez les recettes — cliquez sur une carte pour voir les détails.</p>
                 </div>
 
                 <div class="ml-4">
@@ -276,40 +256,19 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
             </div>
         </header>
 
-	<!-- Filters and Controls -->
+	<!-- Search and Sort Controls -->
 	<div class="mb-8 space-y-6">
-		<!-- Filters -->
-		<div>
-			<div class="flex items-center gap-2 mb-4">
-				<Filter size={20} class="text-gray-600"/>
-				<h2 class="text-xl font-semibold text-gray-800">Filtres</h2>
-			</div>
-			<div class="flex flex-wrap gap-2">
-				{#each difficulties as diff}
-					<button
-						class="cursor-pointer px-3 py-1 rounded-full text-sm font-medium transition-all {selectedDifficulties.has(diff)
-							? 'bg-orange-500 text-white shadow-md'
-							: 'bg-white text-gray-700 border border-gray-300 hover:border-orange-400 hover:bg-orange-50'}"
-						onclick={() => toggleDifficulty(diff)}
-					>
-						{diff}
-					</button>
-				{/each}
-				{#each budgets as budg}
-					<button
-						class="cursor-pointer px-3 py-1 rounded-full text-sm font-medium transition-all {selectedBudgets.has(budg)
-							? 'bg-orange-500 text-white shadow-md'
-							: 'bg-white text-gray-700 border border-gray-300 hover:border-orange-400 hover:bg-orange-50'}"
-						onclick={() => toggleBudget(budg)}
-					>
-						{budg}
-					</button>
-				{/each}
-			</div>
-		</div>
-
 		<!-- Sort and Pagination Controls -->
 		<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+			<div class="flex items-center gap-3 w-full sm:max-w-md">
+				<div class="flex items-center gap-2 bg-white border border-gray-200 px-3 py-2 rounded-full shadow-sm w-full">
+					<Search class="text-gray-400" />
+					<input placeholder="Rechercher..." class="outline-none w-full text-sm" value={query} oninput={onQueryInput} />
+					{#if query}
+						<button type="button" class="ml-2 text-sm text-gray-500" onclick={() => { query = ''; debouncedQuery = ''; currentPage = 1; loadRecipes(); }}>Effacer</button>
+					{/if}
+				</div>
+			</div>
 			<!-- Sort Controls -->
 			<div class="flex items-center gap-4">
 				<div class="flex items-center gap-2">
@@ -320,7 +279,7 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 					{#each sortOptions as option}
 						<button
 							class="cursor-pointer px-3 py-1 text-sm rounded-md transition-all flex items-center gap-1 {sortBy === option.value
-								? 'bg-orange-500 text-white'
+								? 'bg-emerald-500 text-white'
 								: 'bg-gray-100 text-gray-700 hover:bg-gray-200'}"
 							onclick={() => changeSort(option.value)}
 						>
@@ -338,7 +297,6 @@ let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 			</div>
 		</div>
 	</div>
-
 
     {#if !$loading && totalPages > 1}
 		<div class="flex items-center justify-center gap-4 bg-white/80 backdrop-blur-sm rounded-lg px-6 py-3 shadow-sm mt-6">
