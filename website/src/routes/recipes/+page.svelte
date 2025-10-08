@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { writable, get } from 'svelte/store';
+  import RecipeModal from '$lib/components/RecipeModal.svelte';
+  import AddRecipeModal from '$lib/components/AddRecipeModal.svelte';
 
   const recipes = writable([] as any[]);
   const loading = writable(true);
@@ -21,6 +23,30 @@
   let total_time = '';
   let url = '';
   let description = '';
+
+  // Modal state
+  let modalOpen = false;
+  let selectedRecipe: any = null;
+  // Add recipe modal
+  let addModalOpen = false;
+
+  function openRecipe(r: any) {
+    selectedRecipe = r;
+    modalOpen = true;
+  }
+
+  function closeModal() {
+    modalOpen = false;
+    selectedRecipe = null;
+  }
+
+  function openAddModal() {
+    addModalOpen = true;
+  }
+
+  function closeAddModal() {
+    addModalOpen = false;
+  }
 
   async function loadRecipes() {
     loading.set(true);
@@ -116,76 +142,36 @@
 
 <style>
   .page { max-width: 980px; margin: 0 auto; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
-  .grid { display: grid; grid-template-columns: 360px 1fr; gap: 1.5rem; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
   .card { background: #fff; border: 1px solid #eee; padding: 1rem; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);} 
   h1 { margin-bottom: 0.5rem; }
-  .recipe-preview { display:flex; gap:1rem; align-items:center; padding:0.75rem 0; border-bottom:1px solid #f0f0f0 }
-  .recipe-img { width:96px; height:96px; object-fit:cover; border-radius:6px; background:#fafafa; }
+  .recipe-img { width:100%; height:160px; object-fit:cover; border-radius:8px; background:#fafafa; }
   .badges { display:flex; gap:0.5rem; margin-top:0.5rem }
   .badge { background:#f5f5f5; padding:0.25rem 0.5rem; border-radius:4px; font-size:0.85rem }
-  label { display:block; margin-top:0.5rem; font-weight:600; font-size:0.9rem }
-  input, textarea { width:100%; padding:0.5rem; margin-top:0.25rem; border:1px solid #ddd; border-radius:6px }
-  button { margin-top:0.75rem; background:#ff6b00; color:white; border:none; padding:0.6rem 1rem; border-radius:6px; cursor:pointer }
   .title-row { display:flex; gap:1rem; align-items:center }
+  /* Modern theme */
+  .recipes-card { background: linear-gradient(180deg,#ffffff,#fffaf3); border: none; box-shadow: 0 8px 30px rgba(16,24,40,0.08); }
+  .card-compact { display:flex; gap:1rem; align-items:center; padding:0.75rem; border-radius:12px; border:1px solid rgba(16,24,40,0.03); }
+  .meta { display:flex; justify-content:space-between; width:100%; align-items:center }
+  .meta-main .name { font-size:1.05rem; display:block }
+  .meta-main .desc { color:#586069; font-size:0.92rem; margin-top:0.25rem }
+  .view-btn { background: linear-gradient(90deg,#ff8a00,#ff3b81); color:white; border:none; padding:0.5rem 0.85rem; border-radius:10px; cursor:pointer; font-weight:700; transition:transform 180ms ease, box-shadow 180ms ease }
+  .view-btn:hover { transform:translateY(-3px); box-shadow:0 8px 20px rgba(255,59,129,0.12) }
+  .badge { background:linear-gradient(90deg,#f3f4f6,#fff); padding:0.28rem 0.5rem; border-radius:8px; font-size:0.82rem; color:#374151 }
+  .recipes-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:1rem; margin-top:0.5rem }
+  .recipe-card { display:flex; flex-direction:column; gap:0.5rem; padding:0; }
+  .page-header { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:0.75rem }
+  .add-btn { background: linear-gradient(90deg,#06b6d4,#3b82f6); color:white; border:none; padding:0.5rem 0.9rem; border-radius:10px; cursor:pointer; font-weight:700 }
 </style>
 
 <div class="page">
-  <h1>Recettes</h1>
+  <div class="page-header">
+    <h1>Recettes</h1>
+    <button class="add-btn" on:click={openAddModal}>Ajouter une recette</button>
+  </div>
   <div class="grid">
-    <aside>
-      <div class="card">
-        <h2>Ajouter une recette</h2>
-        <label>Nom
-          <input bind:value={name} />
-        </label>
-        <label>Auteur (tip)
-          <input bind:value={author_tip} />
-        </label>
-        <label>Description
-          <textarea bind:value={description} rows={3} />
-        </label>
-        <label>Images (une URL par ligne)
-          <textarea bind:value={images_input} rows={3} placeholder="https://..." />
-        </label>
-        <label>Ingrédients (une ligne par ingrédient)
-          <textarea bind:value={ingredients_input} rows={4} />
-        </label>
-        <label>Étapes (une ligne par étape)
-          <textarea bind:value={steps_input} rows={6} />
-        </label>
-        <label>Temps préparation
-          <input bind:value={prep_time} placeholder="ex: 20 min" />
-        </label>
-        <label>Temps cuisson
-          <input bind:value={cook_time} placeholder="ex: 30 min" />
-        </label>
-        <label>Temps total
-          <input bind:value={total_time} placeholder="ex: 50 min" />
-        </label>
-        <label>Difficulté
-          <input bind:value={difficulty} placeholder="facile / moyen / difficile" />
-        </label>
-        <label>Budget
-          <input bind:value={budget} placeholder="bon marché / moyen / cher" />
-        </label>
-        <label>Quantité (recipe_quantity)
-          <input bind:value={recipe_quantity} placeholder="ex: 4 personnes / 500 g" />
-        </label>
-        <label>Note (rate)
-          <input bind:value={rate} placeholder="ex: 4.2" />
-        </label>
-        <label>Nombre de commentaires
-          <input bind:value={nb_comments} placeholder="ex: 12" />
-        </label>
-        <label>URL source
-          <input bind:value={url} placeholder="https://..." />
-        </label>
-        <button on:click={submitRecipe}>Créer</button>
-      </div>
-    </aside>
-
     <section>
-      <div class="card">
+      <div class="card recipes-card">
         <div class="title-row">
           <h2>Recettes enregistrées</h2>
         </div>
@@ -196,49 +182,33 @@
           {#if $recipes.length === 0}
             <p>Aucune recette.</p>
           {:else}
+            <div class="recipes-grid">
             {#each $recipes as r}
-              <article class="recipe-preview">
+              <article class="recipe-card card-compact">
                 <img class="recipe-img" src={formatImagesForDisplay(r)} alt={r.name} />
-                <div>
-                  <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem">
-                    <div>
-                      <strong style="font-size:1.05rem">{r.name}</strong>
-                      <div style="color:#666; font-size:0.9rem">{r.description}</div>
-                      <div class="badges">
-                        {#if r.prep_time}<div class="badge">Préparation: {r.prep_time}</div>{/if}
-                        {#if r.cook_time}<div class="badge">Cuisson: {r.cook_time}</div>{/if}
-                        {#if r.total_time}<div class="badge">Total: {r.total_time}</div>{/if}
-                        {#if r.difficulty}<div class="badge">{r.difficulty}</div>{/if}
-                        {#if r.budget}<div class="badge">{r.budget}</div>{/if}
-                        {#if r.rate}<div class="badge">⭐ {r.rate}</div>{/if}
-                      </div>
+                <div class="meta">
+                  <div class="meta-main">
+                    <strong class="name">{r.name}</strong>
+                    <div class="desc">{r.description}</div>
+                    <div class="badges">
+                      {#if r.prep_time}<div class="badge">Prépa: {r.prep_time}</div>{/if}
+                      {#if r.cook_time}<div class="badge">Cuisson: {r.cook_time}</div>{/if}
+                      {#if r.total_time}<div class="badge">Total: {r.total_time}</div>{/if}
                     </div>
                   </div>
 
-                  <details style="margin-top:0.5rem">
-                    <summary style="cursor:pointer">Voir la recette</summary>
-                    <div style="margin-top:0.5rem">
-                      <h4>Ingrédients</h4>
-                      <ul>
-                        {#each parseListField(r.ingredients) as ing}
-                          <li>{ing}</li>
-                        {/each}
-                      </ul>
-
-                      <h4>Préparation</h4>
-                      <ol>
-                        {#each parseListField(r.steps) as step}
-                          <li>{step}</li>
-                        {/each}
-                      </ol>
-                    </div>
-                  </details>
+                  <div class="actions">
+                    <button class="view-btn small" on:click={() => openRecipe(r)}>Voir</button>
+                  </div>
                 </div>
               </article>
             {/each}
+            </div>
           {/if}
         {/if}
       </div>
     </section>
   </div>
+  <RecipeModal open={modalOpen} recipe={selectedRecipe} on:close={closeModal} />
+  <AddRecipeModal open={addModalOpen} on:close={closeAddModal} on:created={async (e) => { await loadRecipes(); closeAddModal(); }} />
 </div>
