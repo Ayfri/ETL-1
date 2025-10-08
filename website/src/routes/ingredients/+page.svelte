@@ -8,11 +8,9 @@
 let page = 1;
 let total = 0;
 let limit = 48;
-let selectedLetter: string | null = null;
 let query: string = '';
 let debouncedQuery: string = '';
 let searchTimeout: any = null;
-const letters = Array.from({ length: 26 }, (_, i) => String.fromCharCode(97 + i));
 
 // recipes menu state
 let showRecipesMenu = false;
@@ -72,9 +70,8 @@ function closeRecipesMenu() {
     async function loadIngredients() {
         loadError = null;
         try {
-            const letterParam = selectedLetter ? `&letter=${selectedLetter}` : '';
             const queryParam = debouncedQuery ? `&q=${encodeURIComponent(debouncedQuery)}` : '';
-            const res = await fetch(`/api/ingredients?page=${page}&limit=${limit}${letterParam}${queryParam}`);
+            const res = await fetch(`/api/ingredients?page=${page}&limit=${limit}${queryParam}`);
             if (!res.ok) throw new Error('Failed to fetch');
             const json = await res.json();
             ingredients = json.data || [];
@@ -93,8 +90,6 @@ function onQueryInput(e: Event) {
     if (searchTimeout) clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
         debouncedQuery = query.trim();
-        // When searching, behave like "Tous" — clear any selected letter
-        selectedLetter = null;
         page = 1;
         loadIngredients();
     }, 350);
@@ -122,12 +117,7 @@ function onQueryInput(e: Event) {
                 </div>
             </div>
 
-            <div class="flex flex-wrap gap-2 items-center">
-                <button type="button" class="px-3 py-1 rounded-full text-sm font-medium transition-all {selectedLetter === null ? 'bg-emerald-500 text-white shadow-md' : 'bg-white text-gray-700 border border-gray-200 hover:bg-emerald-50'}" on:click={() => { selectedLetter = null; page = 1; loadIngredients(); }}>Tous</button>
-                {#each letters as l}
-                    <button type="button" class="px-3 py-1 rounded-full text-sm font-medium transition-all {selectedLetter === l ? 'bg-emerald-500 text-white shadow-md' : 'bg-white text-gray-700 border border-gray-200 hover:bg-emerald-50'}" on:click={() => { selectedLetter = l; page = 1; loadIngredients(); }}>{l.toUpperCase()}</button>
-                {/each}
-            </div>
+            <!-- removed letter buttons: search-only UI -->
         </div>
 
     {#if loadError}
