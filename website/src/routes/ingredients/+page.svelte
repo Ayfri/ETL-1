@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
+    import { fly } from 'svelte/transition';
     import RecipeModal from '$lib/components/RecipeModal.svelte';
     import { Search } from '@lucide/svelte';
 
@@ -11,6 +12,7 @@ let limit = 48;
 let query: string = '';
 let debouncedQuery: string = '';
 let searchTimeout: any = null;
+let appearDelayBase = 35; // ms per item
 
 // recipes menu state
 let showRecipesMenu = false;
@@ -83,6 +85,13 @@ function closeRecipesMenu() {
     }
 
     onMount(() => loadIngredients());
+    function computeDelay(index: number) {
+        return index * appearDelayBase;
+    }
+
+    onDestroy(() => {
+        // noop for now (no persistent listeners)
+    });
 
 function onQueryInput(e: Event) {
     const target = e.currentTarget as HTMLInputElement;
@@ -143,9 +152,10 @@ function onQueryInput(e: Event) {
         <div class="text-red-600">{loadError}</div>
     {:else}
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {#each ingredients as ing}
+            {#each ingredients as ing, i (ing.id)}
                 <button
                     type="button"
+                    in:fly={{ y: 8, duration: 260, delay: computeDelay(i) }}
                     class="bg-white rounded shadow p-2 flex flex-col items-center gap-2 cursor-pointer transition-shadow duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-300 {selectedIngredient === ing.name ? 'ring-4 ring-emerald-400' : ''}"
                     on:click={() => openIngredient(ing.name)}
                 >
