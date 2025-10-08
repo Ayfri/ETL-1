@@ -1,5 +1,6 @@
 <script lang="ts">
     import { flip } from 'svelte/animate';
+    import { fly } from 'svelte/transition';
     import FoodCard from '$lib/components/FoodCard.svelte';
     import FoodDetails from '$lib/components/FoodDetails.svelte';
     import { ChevronLeft, ChevronRight, ArrowUp, ArrowDown, BookOpen, Filter, ArrowUpDown } from '@lucide/svelte';
@@ -37,7 +38,11 @@
         { value: 'fat', label: 'Lipides' }
     ];
 
-    let loadTimeout: number | null = null;
+    let loadTimeout: ReturnType<typeof setTimeout> | null = null;
+    const appearDelayBase = 35; // ms per item
+    function computeDelay(index: number) {
+        return index * appearDelayBase;
+    }
 
     async function loadFoods() {
         loadError = null;
@@ -221,14 +226,14 @@
 				
 				<div class="flex items-center gap-2">
 					<span class="text-sm font-medium">Page</span>
-					<input 
-						type="number" 
-						min="1" 
-						max={Math.max(1, Math.ceil(total / data.limit))} 
-						value={page} 
-						onchange={(e) => goToPage(parseInt(e.target.value) || 1)}
-						class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
-					/>
+                    <input 
+                        type="number" 
+                        min="1" 
+                        max={Math.max(1, Math.ceil(total / data.limit))} 
+                        value={page} 
+                        onchange={(e: Event) => goToPage(parseInt((e.target as HTMLInputElement).value) || 1)}
+                        class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
+                    />
 					<span class="text-sm">sur {Math.max(1, Math.ceil(total / data.limit))}</span>
 				</div>
 				
@@ -242,11 +247,11 @@
 		<div
 			class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
 		>
-			{#each foods as food (food.id)}
-				<div animate:flip={{ duration: 300 }}>
-					<FoodCard {food} selected={selectedFood?.id === food.id} onclick={() => selectFood(food)} />
-				</div>
-			{/each}
+            {#each foods as food, i (food.id)}
+                <div animate:flip={{ duration: 300 }} in:fly={{ y: 8, duration: 260, delay: computeDelay(i) }}>
+                    <FoodCard {food} selected={selectedFood?.id === food.id} onclick={() => selectFood(food)} />
+                </div>
+            {/each}
 		</div>
 	</div>
 

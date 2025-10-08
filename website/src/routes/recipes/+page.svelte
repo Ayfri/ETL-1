@@ -6,8 +6,16 @@
 	import {writable} from 'svelte/store';
 	import type { Recipe } from '$lib/db';
 
-	const recipes = writable([] as Recipe[]);
-	const loading = writable(true);
+import { fly } from 'svelte/transition';
+import { flip } from 'svelte/animate';
+
+const appearDelayBase = 35;
+function computeDelay(index: number) {
+    return index * appearDelayBase;
+}
+
+const recipes = writable([] as Recipe[]);
+const loading = writable(true);
 
 	let currentPage = $state(1);
 	let totalRecipes = $state(0);
@@ -34,7 +42,7 @@
 		{ value: 'created_at', label: 'Date de création' }
 	];
 
-	let loadTimeout: number | null = null;
+let loadTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	let name = $state('');
 	let authorTip = $state('');
@@ -231,15 +239,26 @@
 	onMount(loadRecipes);
 </script>
 
-<div class="max-w-4xl mx-auto font-sans p-4">
-	<div class="flex items-center justify-between mb-6">
-		<h1 class="text-2xl font-bold">Recipes</h1>
-		<button
-			class="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-2 rounded-lg font-bold hover:opacity-90"
-			onclick={openAddModal}
-		>Add Recipe
-		</button>
-	</div>
+<div class="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <header class="mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-extrabold text-gray-900 flex items-center gap-3">
+                        <span class="inline-block w-2 h-8 bg-emerald-500 rounded"></span>
+                        Recettes
+                    </h1>
+                    <p class="text-sm text-gray-600 mt-1">Parcourez et filtrez les recettes — cliquez sur une carte pour voir les détails.</p>
+                </div>
+
+                <div class="ml-4">
+                    <button
+                        class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm"
+                        onclick={openAddModal}
+                    >Ajouter une recette</button>
+                </div>
+            </div>
+        </header>
 
 	<!-- Filters and Controls -->
 	<div class="mb-8 space-y-6">
@@ -305,7 +324,7 @@
 	</div>
 
 
-	{#if totalPages > 1}
+    {#if !$loading && totalPages > 1}
 		<div class="flex items-center justify-center gap-4 bg-white/80 backdrop-blur-sm rounded-lg px-6 py-3 shadow-sm mt-6">
 			<button
 				onclick={prevPage} disabled={currentPage <= 1}
@@ -314,18 +333,18 @@
 				<ChevronLeft size={16}/>
 			</button>
 
-			<div class="flex items-center gap-2">
-				<span class="text-sm font-medium">Page</span>
-				<input
-					type="number"
-					min="1"
-					max={Math.max(1, Math.ceil(totalRecipes / limit))}
-					value={currentPage}
-					onchange={(e) => goToPage(parseInt(e.target.value) || 1)}
-					class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
-				/>
-				<span class="text-sm">of {Math.max(1, Math.ceil(totalRecipes / limit))}</span>
-			</div>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium">Page</span>
+                    <input
+                        type="number"
+                        min="1"
+                        max={Math.max(1, Math.ceil(totalRecipes / limit))}
+                        value={currentPage}
+                        onchange={(e: Event) => goToPage(parseInt((e.target as HTMLInputElement).value) || 1)}
+                        class="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm"
+                    />
+                    <span class="text-sm">of {Math.max(1, Math.ceil(totalRecipes / limit))}</span>
+                </div>
 
 			<button
 				onclick={nextPage} disabled={currentPage >= Math.max(1, Math.ceil(totalRecipes / limit))}
@@ -340,58 +359,43 @@
 		</div>
 	{/if}
 
-	<div class="space-y-6">
-		<section>
-			<div class="bg-gradient-to-br from-white to-orange-50 p-6 rounded-xl shadow-lg">
-				<div class="flex items-center gap-4 mb-4">
-					<h2 class="text-xl font-semibold">Saved Recipes</h2>
-				</div>
-
-				{#if $loading}
-					<p class="text-gray-500">Loading...</p>
-				{:else}
-					{#if $recipes.length === 0}
-						<p class="text-gray-500">No recipes.</p>
-					{:else}
-						<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
-							{#each $recipes as recipe}
-								<article
-									class="flex flex-col gap-2 p-3 rounded-xl border border-gray-100 hover:shadow-md transition-shadow"
-								>
-									<button
-										class="w-full text-left p-0 hover:transform hover:-translate-y-1 transition-transform"
-										onclick={() => openRecipe(recipe)} aria-label={`Open ${recipe.name}`}
-									>
-										<img
-											class="w-full h-40 object-cover rounded-lg bg-gray-100" src={formatImagesForDisplay(recipe)}
-											alt={recipe.name}
-										/>
-										<div class="flex justify-between items-center w-full mt-2">
-											<div class="flex-1">
-												<strong class="text-lg block">{recipe.name}</strong>
-												<div class="text-gray-600 text-sm mt-1">{recipe.description}</div>
-												<div class="flex gap-2 mt-2">
-													{#if recipe.prep_time}<span
-														class="bg-gray-100 px-2 py-1 rounded text-xs"
-													>Prep: {recipe.prep_time}</span>{/if}
-													{#if recipe.cook_time}<span
-														class="bg-gray-100 px-2 py-1 rounded text-xs"
-													>Cook: {recipe.cook_time}</span>{/if}
-													{#if recipe.total_time}<span
-														class="bg-gray-100 px-2 py-1 rounded text-xs"
-													>Total: {recipe.total_time}</span>{/if}
-												</div>
-											</div>
-										</div>
-									</button>
-								</article>
-							{/each}
-						</div>
-					{/if}
-				{/if}
-			</div>
-		</section>
-	</div>
+        <div class="space-y-6">
+        <section>
+            {#if $loading}
+                <p class="text-gray-500">Loading...</p>
+            {:else}
+                {#if $recipes.length === 0}
+                    <p class="text-gray-500">No recipes.</p>
+                {:else}
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
+                        {#each $recipes as recipe, i (recipe.id)}
+                            <button
+                                type="button"
+                                animate:flip={{ duration: 300 }}
+                                in:fly={{ y: 8, duration: 260, delay: i * 35 }}
+                                class="bg-white rounded shadow p-2 flex flex-col items-center gap-2 cursor-pointer transition-shadow duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-300 text-left"
+                                onclick={() => openRecipe(recipe)}
+                            >
+                                <img class="w-full h-40 object-cover rounded-lg bg-gray-100" src={formatImagesForDisplay(recipe)} alt={recipe.name} />
+                                <div class="w-full">
+                                    <div class="text-lg font-semibold text-gray-900">{recipe.name}</div>
+                                    {#if recipe.description}
+                                        <div class="text-gray-600 text-sm mt-1">{recipe.description}</div>
+                                    {/if}
+                                    <div class="flex gap-2 mt-2">
+                                        {#if recipe.prep_time}<span class="bg-gray-100 px-2 py-1 rounded text-xs">Prep: {recipe.prep_time}</span>{/if}
+                                        {#if recipe.cook_time}<span class="bg-gray-100 px-2 py-1 rounded text-xs">Cook: {recipe.cook_time}</span>{/if}
+                                        {#if recipe.total_time}<span class="bg-gray-100 px-2 py-1 rounded text-xs">Total: {recipe.total_time}</span>{/if}
+                                    </div>
+                                </div>
+                            </button>
+                        {/each}
+                    </div>
+                {/if}
+            {/if}
+        </section>
+    </div>
 	<RecipeModal open={modalOpen} recipe={selectedRecipe} on:close={closeModal}/>
 	<AddRecipeModal open={addModalOpen} on:close={closeAddModal} on:created={async (e) => { await loadRecipes(); closeAddModal(); }}/>
+    </div>
 </div>
