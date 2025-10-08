@@ -369,7 +369,7 @@
             {/if}
         </section>
     </div>
-	<RecipeModal open={modalOpen} recipe={selectedRecipe} on:close={closeModal}/>
+	<RecipeModal open={modalOpen} recipe={selectedRecipe} onclose={closeModal}/>
 	<AddRecipeModal open={addModalOpen} on:close={closeAddModal} on:created={async (e) => { await loadRecipes(); closeAddModal(); }}/>
     </div>
 </div>

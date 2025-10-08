@@ -1,168 +1,138 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte';
-  import { fly, scale, fade } from 'svelte/transition';
-  import { X } from '@lucide/svelte';
+	import {X} from '@lucide/svelte';
 
-  export let open: boolean = false;
-  export let recipe: any = null;
-  const dispatch = createEventDispatcher();
+	export let open: boolean = false;
+	export let recipe: any = null;
+	export let onclose: () => void;
 
-  function close() {
-    dispatch('close');
-  }
+	function close() {
+		onclose();
+	}
 
-  let modalEl: HTMLElement | null = null;
+	function parseListField(field: any): string[] {
+		if (!field) return [];
+		if (typeof field === 'string') {
+			try {
+				const parsed = JSON.parse(field);
+				if (Array.isArray(parsed)) return parsed;
+			} catch {
+			}
+			// Accept JSON array, newline, comma or pipe-separated lists
+			return field.split(/[,|\n]+/).map(s => s.trim()).filter(Boolean);
+		}
+		if (Array.isArray(field)) return field;
+		return [];
+	}
 
-  function onBackdropClick(e: Event) {
-    // accept MouseEvent or KeyboardEvent - close only when target is backdrop
-    const target = (e as any).target;
-    const current = (e as any).currentTarget;
-    if (target === current) close();
-  }
+	function parseIngredients(recipe: any): any[] {
+		if (recipe.ingredients_json) {
+			try {
+				return JSON.parse(recipe.ingredients_json);
+			} catch {
+			}
+		}
+		// Fallback to raw ingredients
+		const raw = parseListField(recipe.ingredients || recipe.ingredients_raw);
+		return raw.map(ing => ({quantity: '', unit: '', name: ing, raw: ing}));
+	}
 
-  function parseListField(field: any): string[] {
-    if (!field) return [];
-    if (typeof field === 'string') {
-      try {
-        const parsed = JSON.parse(field);
-        if (Array.isArray(parsed)) return parsed;
-      } catch {}
-      return field.split('\n').map(s => s.trim()).filter(Boolean);
-    }
-    if (Array.isArray(field)) return field;
-    return [];
-  }
-
-  function getFirstImageForRecipe(r: any): string {
-    if (!r) return '';
-    // try parsing images field (could be JSON string or array or newline list)
-    const imgs = parseListField(r.images || r.image_url || '');
-    if (imgs.length) return imgs[0];
-    // fallback to image_url if present
-    if (typeof r.image_url === 'string' && r.image_url.trim()) return r.image_url.trim();
-    return '';
-  }
+	function getFirstImageForRecipe(r: any): string {
+		if (!r) return '';
+		// try parsing images field (could be JSON string or array or newline list)
+		const imgs = parseListField(r.images || r.image_url || '');
+		if (imgs.length) return imgs[0];
+		// fallback to image_url if present
+		if (typeof r.image_url === 'string' && r.image_url.trim()) return r.image_url.trim();
+		return '';
+	}
 </script>
 
 {#if open && recipe}
-  <div class="fixed inset-0 z-50 flex items-center justify-center">
-    <div
-      class="backdrop"
-      role="button"
-      tabindex="0"
-      aria-label="Fermer le modal"
-      on:click={onBackdropClick}
-      on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') onBackdropClick(e); }}
-      transition:fade
-    ></div>
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-[3px]">
+		<div class="z-60 w-full max-w-[1200px] max-h-[95vh] overflow-auto bg-gradient-to-b from-white to-orange-50 rounded-xl shadow-2xl p-6 transform-origin-center scale-100 transition-transform duration-220">
+			<header class="flex items-center justify-between gap-4 p-2">
+				<div class="flex items-center gap-2">
+					<h3 class="text-xl font-semibold m-0">{recipe.name}</h3>
+					{#if recipe.recipe_quantity}
+						<span class="bg-gradient-to-r from-orange-200 to-red-200 px-2 py-1 rounded-full font-semibold text-gray-800 ml-2">{recipe.recipe_quantity}</span>{/if}
+				</div>
+				<button class="bg-transparent border-none p-1 cursor-pointer" on:click={close} aria-label="Fermer">
+					<X/>
+				</button>
+			</header>
 
-    <div bind:this={modalEl} class="modal" transition:scale={{ duration: 220 }}>
-      <header class="modal-header">
-        <div class="heading">
-          <h3>{recipe.name}</h3>
-          {#if recipe.recipe_quantity}<span class="pill">{recipe.recipe_quantity}</span>{/if}
-        </div>
-        <button class="close-btn" on:click={close} aria-label="Fermer"><X /></button>
-      </header>
+			<div class="p-2">
+				{#if getFirstImageForRecipe(recipe)}
+					<img
+						src={getFirstImageForRecipe(recipe)}
+						alt={recipe.name || 'Recette'}
+						class="w-full h-[300px] md:h-[200px] object-cover rounded-lg mb-3"
+					/>
+				{/if}
 
-      <div class="modal-body">
-        {#if getFirstImageForRecipe(recipe)}
-          <img src={getFirstImageForRecipe(recipe)} alt={recipe.name || 'Recette'} class="hero" />
-        {/if}
+				<section class="grid grid-cols-[1fr_320px] md:grid-cols-1 gap-4">
+					<div class="flex flex-col gap-4">
+						<div class="bg-gradient-to-b from-white to-orange-50 rounded-lg p-3 shadow-sm">
+							<h4 class="text-lg font-medium m-0 mb-2">Ingrédients</h4>
+							<ul class="m-0 pl-4">
+								{#each parseIngredients(recipe) as ing}
+									<li>{ing.quantity} {ing.unit} {ing.name}</li>
+								{/each}
+							</ul>
+						</div>
 
-        <section class="sections">
-          <div class="left">
-            <div class="section card">
-              <h4>Ingrédients</h4>
-              <ul>
-                {#each parseListField(recipe.ingredients || recipe.ingredients_raw) as ing}
-                  <li>{ing}</li>
-                {/each}
-              </ul>
-            </div>
+						<div class="bg-gradient-to-b from-white to-orange-50 rounded-lg p-3 shadow-sm">
+							<h4 class="text-lg font-medium m-0 mb-2">Préparation</h4>
+							<ol class="m-0 pl-4">
+								{#each parseListField(recipe.steps) as step}
+									<li>{step}</li>
+								{/each}
+							</ol>
+						</div>
+					</div>
 
-            <div class="section card">
-              <h4>Préparation</h4>
-              <ol>
-                {#each parseListField(recipe.steps) as step}
-                  <li>{step}</li>
-                {/each}
-              </ol>
-            </div>
-          </div>
+					<aside class="flex flex-col gap-4">
+						<div class="bg-gradient-to-b from-white to-orange-50 rounded-lg p-3 shadow-sm">
+							{#if recipe.prep_time}
+								<div><strong>Préparation:</strong> {recipe.prep_time}</div>
+							{/if}
+							{#if recipe.cook_time}
+								<div><strong>Cuisson:</strong> {recipe.cook_time}</div>
+							{/if}
+							{#if recipe.total_time}
+								<div><strong>Temps total:</strong> {recipe.total_time}</div>
+							{/if}
+							{#if recipe.difficulty}
+								<div><strong>Difficulté:</strong> {recipe.difficulty}</div>
+							{/if}
+							{#if recipe.budget}
+								<div><strong>Budget:</strong> {recipe.budget}</div>
+							{/if}
+							{#if recipe.rate}
+								<div><strong>Note:</strong> ★ {recipe.rate}</div>
+							{/if}
+						</div>
 
-          <aside class="right">
-            <div class="card small">
-              {#if recipe.prep_time}<div><strong>Préparation:</strong> {recipe.prep_time}</div>{/if}
-              {#if recipe.cook_time}<div><strong>Cuisson:</strong> {recipe.cook_time}</div>{/if}
-              {#if recipe.total_time}<div><strong>Temps total:</strong> {recipe.total_time}</div>{/if}
-              {#if recipe.difficulty}<div><strong>Difficulté:</strong> {recipe.difficulty}</div>{/if}
-              {#if recipe.budget}<div><strong>Budget:</strong> {recipe.budget}</div>{/if}
-              {#if recipe.rate}<div><strong>Note:</strong> ★ {recipe.rate}</div>{/if}
-            </div>
+						{#if recipe.description}
+							<div class="bg-gradient-to-b from-white to-orange-50 rounded-lg p-3 shadow-sm">
+								<h5 class="text-base font-medium">Description</h5>
+								<p class="m-0">{recipe.description}</p>
+							</div>
+						{/if}
 
-            {#if recipe.description}
-              <div class="card small">
-                <h5>Description</h5>
-                <p>{recipe.description}</p>
-              </div>
-            {/if}
-
-            {#if recipe.url}
-              <div class="card small">
-                <a href={recipe.url} target="_blank" rel="noopener noreferrer" class="source-link">Ouvrir la source</a>
-              </div>
-            {/if}
-          </aside>
-        </section>
-      </div>
-    </div>
-  </div>
+						{#if recipe.url}
+							<div class="bg-gradient-to-b from-white to-orange-50 rounded-lg p-3 shadow-sm">
+								<a
+									href={recipe.url}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="inline-block text-orange-600 font-bold"
+								>Ouvrir la source</a>
+							</div>
+						{/if}
+					</aside>
+				</section>
+			</div>
+		</div>
+	</div>
 {/if}
-
-<style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(10,11,13,0.55);
-    backdrop-filter: blur(3px);
-    z-index: 50;
-  }
-
-  .modal {
-    z-index: 60;
-    width: min(1100px, 95%);
-    max-height: 90vh;
-    overflow: auto;
-    background: linear-gradient(180deg, #ffffff, #fffaf3);
-    border-radius: 12px;
-    box-shadow: 0 12px 40px rgba(16,24,40,0.35);
-    padding: 1rem;
-    transform-origin: center center;
-  }
-
-  .modal-header { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:0.5rem }
-  .modal-header .heading h3 { margin:0; font-size:1.4rem }
-  .pill { background:linear-gradient(90deg,#ffd6a5,#ff7b7b); padding:0.25rem 0.5rem; border-radius:999px; font-weight:600; color:#2b2b2b; margin-left:0.5rem }
-  .close-btn { background:transparent; border:none; padding:0.25rem; cursor:pointer }
-
-  .modal-body { padding:0.5rem }
-  .hero { width:100%; height:300px; object-fit:cover; border-radius:10px; margin-bottom:0.75rem }
-
-  .sections { display:grid; grid-template-columns: 1fr 320px; gap:1rem }
-  .left { display:flex; flex-direction:column; gap:1rem }
-  .right { display:flex; flex-direction:column; gap:1rem }
-
-  .card { background: linear-gradient(180deg,#fff,#fffefc); border-radius:8px; padding:0.75rem; box-shadow: 0 2px 8px rgba(11,12,16,0.06) }
-  .card.small { padding:0.6rem }
-  .section h4 { margin:0 0 0.4rem 0 }
-  ul, ol { margin:0; padding-left:1.1rem }
-
-  .source-link { display:inline-block; color:#ff6b00; font-weight:700 }
-
-  @media (max-width: 800px) {
-    .sections { grid-template-columns: 1fr }
-    .hero { height:200px }
-    .modal { width: 96% }
-  }
-</style>

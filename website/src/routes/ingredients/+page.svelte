@@ -216,9 +216,7 @@ function onQueryInput(e: Event) {
                 {/if}
             </div>
 
-            <RecipeModal open={showRecipeModal} recipe={selectedRecipe} on:close={closeRecipe} />
+            <RecipeModal open={showRecipeModal} recipe={selectedRecipe} onclose={closeRecipe} />
         </div>
     </div>
 </div>
-
-
