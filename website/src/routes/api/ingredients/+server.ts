@@ -28,15 +28,29 @@ export const GET: RequestHandler = async ({ url }) => {
         const totalRow = db.prepare(`SELECT COUNT(*) as total FROM ingredients ${whereClause}`).get(...params);
         const total = totalRow ? totalRow.total : 0;
 
-        // First, get all ingredients with their IDs
-        const ingredientsBase = db.prepare(`SELECT id, name, image_url FROM ingredients ${whereClause} ORDER BY name LIMIT ? OFFSET ?`).all(...params, limit, offset);
+        // Get ingredients with recipe counts in a single query
+        const query = `
+            SELECT 
+                i.id, 
+                i.name, 
+                i.image_url,
+                COALESCE(COUNT(ri.recipe_id), 0) as recipeCount
+            FROM ingredients i
+            LEFT JOIN recipe_ingredients ri ON i.id = ri.ingredient_id
+            ${whereClause}
+            GROUP BY i.id, i.name, i.image_url
+            ORDER BY i.name
+            LIMIT ? OFFSET ?
+        `;
         
-        // Then count recipes for each ingredient
-        const countStmt = db.prepare(`SELECT COUNT(*) as recipeCount FROM recipe_ingredients WHERE ingredient_id = ?`);
-        const rows = (ingredientsBase as any[]).map(ing => ({
-            ...ing,
-            recipeCount: (countStmt.get(ing.id) as any)?.recipeCount || 0
-        }));
+        console.log('Query:', query);
+        console.log('Params:', [...params, limit, offset]);
+        
+        const rows = db.prepare(query).all(...params, limit, offset) as any[];
+        
+        console.log('Rows returned:', rows);
+        console.log('First row:', rows[0]);
+        console.log('Recipe count of first:', rows[0]?.recipeCount);
 
         return json({ data: rows, total, page, limit, letter: letterParam, q });
     } catch (err) {
