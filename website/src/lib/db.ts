@@ -403,3 +403,185 @@ export function getStatistics(): {
 		highQuality: (database.prepare('SELECT COUNT(*) as count FROM products WHERE completeness >= 0.8').get() as { count: number }).count
 	};
 }
+
+/**
+ * Get products usable in Marmiton recipes (have ingredients that appear in recipes)
+ */
+export function queryUsableProducts({
+	page = 1,
+	limit = 100,
+	sortBy = 'name',
+	sortOrder = 'asc',
+	search = ''
+}: {
+	page?: number;
+	limit?: number;
+	sortBy?: string;
+	sortOrder?: string;
+	search?: string;
+} = {}): { products: FoodProduct[]; total: number; pages: number } {
+	const database = getDatabase();
+
+	// Build WHERE clause - products that have ingredient matches
+	const whereClauses: string[] = [
+		'p.code IN (SELECT DISTINCT product_code FROM product_ingredient_matches)'
+	];
+	const params: any[] = [];
+
+	if (search) {
+		whereClauses.push('(p.product_name LIKE ? OR p.brands LIKE ?)');
+		params.push(`%${search}%`, `%${search}%`);
+	}
+
+	const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+	// Build ORDER BY clause
+	let orderByClause = 'ORDER BY ';
+	switch (sortBy) {
+		case 'name':
+			orderByClause += 'p.product_name';
+			break;
+		case 'nutriscore':
+			orderByClause += 'p.nutriscore_grade';
+			break;
+		case 'energy':
+			orderByClause += 'n.energy_kcal_100g';
+			break;
+		default:
+			orderByClause += 'p.product_name';
+	}
+	orderByClause += ` ${sortOrder.toUpperCase()} NULLS LAST`;
+
+	// Get total count
+	const countQuery = `
+		SELECT COUNT(*) as total 
+		FROM products p
+		${whereClause}
+	`;
+	const countResult = database.prepare(countQuery).get(...params) as { total: number };
+	const total = countResult.total;
+
+	// Get paginated products
+	const offset = (page - 1) * limit;
+	const query = `
+		SELECT 
+			p.code,
+			p.product_name,
+			p.brands,
+			p.categories,
+			p.main_category,
+			p.main_category_en,
+			p.nutriscore_grade,
+			p.nova_group,
+			p.image_url,
+			p.image_small_url,
+			n.energy_kcal_100g,
+			n.fat_100g,
+			n.saturated_fat_100g,
+			n.carbohydrates_100g,
+			n.sugars_100g,
+			n.proteins_100g,
+			n.salt_100g,
+			n.fiber_100g,
+			p.ingredients_text,
+			p.allergens,
+			p.additives_n,
+			p.completeness
+		FROM products p
+		LEFT JOIN (
+			SELECT
+				product_code,
+				MAX(energy_kcal_100g) AS energy_kcal_100g,
+				MAX(fat_100g) AS fat_100g,
+				MAX(saturated_fat_100g) AS saturated_fat_100g,
+				MAX(carbohydrates_100g) AS carbohydrates_100g,
+				MAX(sugars_100g) AS sugars_100g,
+				MAX(proteins_100g) AS proteins_100g,
+				MAX(salt_100g) AS salt_100g,
+				MAX(fiber_100g) AS fiber_100g
+			FROM nutrition_facts
+			GROUP BY product_code
+		) n ON p.code = n.product_code
+		${whereClause}
+		${orderByClause}
+		LIMIT ? OFFSET ?
+	`;
+
+	const products = database.prepare(query).all(...params, limit, offset) as FoodProduct[];
+	const pages = Math.ceil(total / limit);
+
+	return { products, total, pages };
+}
+
+/**
+ * Get recipes that use ingredients matching a product
+ */
+export function getRecipesForProduct(productCode: string): Recipe[] {
+	const database = getDatabase();
+
+	// Get matched ingredient names
+	const matchQuery = `
+		SELECT i.name as ingredient_name
+		FROM product_ingredient_matches pim
+		JOIN ingredients i ON pim.ingredient_id = i.id
+		WHERE pim.product_code = ?
+	`;
+	
+	const matchedIngredients = database.prepare(matchQuery).all(productCode) as Array<{ ingredient_name: string }>;
+	
+	if (matchedIngredients.length === 0) {
+		return [];
+	}
+
+	// Search for recipes that mention these ingredients in their raw or json ingredients
+	const conditions = matchedIngredients.map(() => 
+		'(LOWER(ingredients_raw) LIKE ? OR LOWER(ingredients_json) LIKE ?)'
+	).join(' OR ');
+	
+	const params: string[] = [];
+	matchedIngredients.forEach(ing => {
+		const pattern = `%${ing.ingredient_name.toLowerCase()}%`;
+		params.push(pattern, pattern);
+	});
+
+	const query = `
+		SELECT DISTINCT * 
+		FROM recipes
+		WHERE ${conditions}
+		ORDER BY rate DESC
+		LIMIT 20
+	`;
+
+	return database.prepare(query).all(...params) as Recipe[];
+}
+
+/**
+ * Get matched ingredients for a product
+ */
+export function getMatchedIngredientsForProduct(productCode: string): Array<{
+	ingredient_id: number;
+	ingredient_name: string;
+	match_score: number;
+	match_method: string;
+}> {
+	const database = getDatabase();
+
+	const query = `
+		SELECT 
+			i.id as ingredient_id,
+			i.name as ingredient_name,
+			pim.match_score,
+			pim.match_method
+		FROM product_ingredient_matches pim
+		JOIN ingredients i ON pim.ingredient_id = i.id
+		WHERE pim.product_code = ?
+		ORDER BY pim.match_score DESC
+	`;
+
+	return database.prepare(query).all(productCode) as Array<{
+		ingredient_id: number;
+		ingredient_name: string;
+		match_score: number;
+		match_method: string;
+	}>;
+}
