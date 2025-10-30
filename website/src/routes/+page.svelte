@@ -2,7 +2,8 @@
     import { flip } from 'svelte/animate';
     import { fly } from 'svelte/transition';
     import FoodCard from '$lib/components/FoodCard.svelte';
-    import FoodDetails from '$lib/components/FoodDetails.svelte';
+    import ProductDetails from '$lib/components/ProductDetails.svelte';
+    import type { FoodProduct } from '$lib/db';
     import { ChevronLeft, ChevronRight, ArrowUp, ArrowDown, BookOpen, Filter, ArrowUpDown } from '@lucide/svelte';
     import type { Food } from '$lib/types';
     import type { PageData } from './$types.js';
@@ -14,6 +15,7 @@
     let { data }: Props = $props();
 
     let selectedFood = $state<Food | null>(null);
+    let selectedProduct = $state<FoodProduct | null>(null);
 
     // Données chargées dynamiquement depuis le CSV via l'endpoint avec pagination
     let foods = $state<Food[]>([]);
@@ -25,6 +27,9 @@
     // Filtres
     let selectedCategories = $state<Set<string>>(new Set(data.categories));
     const categories = ['Bakery', 'Beverages', 'Dairy', 'Fruits', 'Meat', 'Snacks', 'Sweets', 'Vegetables'];
+    
+    // Filter for Marmiton recipes
+    let showOnlyUsableInRecipes = $state<boolean>(false);
 
     // Tri
     let sortBy = $state<string>(data.sortBy);
@@ -49,7 +54,8 @@
         try {
             const categoryParam = selectedCategories.size > 0 ? `&category=${Array.from(selectedCategories).join(',')}` : '';
             const sortParam = `&sort=${sortBy}&order=${sortOrder}`;
-            const res = await fetch(`/api/foods?page=${page}&limit=${data.limit}${categoryParam}${sortParam}`);
+            const usableParam = showOnlyUsableInRecipes ? '&usable_in_recipes=true' : '';
+            const res = await fetch(`/api/foods?page=${page}&limit=${data.limit}${categoryParam}${sortParam}${usableParam}`);
             const text = await res.text();
             if (!res.ok) {
                 let serverMsg = text;
@@ -105,6 +111,12 @@
         debouncedLoadFoods();
     }
 
+    function toggleUsableInRecipes() {
+        showOnlyUsableInRecipes = !showOnlyUsableInRecipes;
+        page = 1; // reset to first page
+        debouncedLoadFoods();
+    }
+
     function changeSort(newSortBy: string) {
         if (sortBy === newSortBy) {
             sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
@@ -139,12 +151,15 @@
         }
     }
 
-    function selectFood(food: Food) {
+    function selectFood(food: Food & { _fullProduct?: FoodProduct }) {
         selectedFood = food;
+        // Also set the full product if available
+        selectedProduct = food._fullProduct || null;
     }
 
     function closeDetails() {
         selectedFood = null;
+        selectedProduct = null;
     }
 </script>
 
@@ -181,6 +196,22 @@
 						</button>
 					{/each}
 				</div>
+			</div>
+
+			<!-- Marmiton Recipes Filter -->
+			<div>
+				<div class="flex items-center gap-2 mb-4">
+					<BookOpen size={20} class="text-orange-600" />
+					<h2 class="text-xl font-semibold text-gray-800">Recettes Marmiton</h2>
+				</div>
+				<button
+					class="cursor-pointer px-4 py-2 rounded-lg text-sm font-medium transition-all {showOnlyUsableInRecipes
+						? 'bg-orange-500 text-white shadow-md'
+						: 'bg-white text-gray-700 border border-gray-300 hover:border-orange-400 hover:bg-orange-50'}"
+					onclick={() => toggleUsableInRecipes()}
+				>
+					{showOnlyUsableInRecipes ? '✓ ' : ''}Aliments utilisables dans les recettes
+				</button>
 			</div>
 
 			<!-- Sort and Pagination Controls -->
@@ -257,8 +288,8 @@
 
 	<!-- Details Panel -->
 	<div class="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl z-50 transition-all duration-500 ease-in-out {selectedFood ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}">
-		{#if selectedFood}
-			<FoodDetails food={selectedFood} onclose={closeDetails} />
+		{#if selectedProduct}
+			<ProductDetails product={selectedProduct} onclose={closeDetails} />
 		{/if}
 	</div>
 </div>

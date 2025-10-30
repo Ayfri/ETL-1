@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { queryProducts, getCategories, getStatistics } from '$lib/db';
+import { queryProducts, queryUsableProducts, getCategories, getStatistics } from '$lib/db';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -11,20 +11,30 @@ export const GET: RequestHandler = async ({ url }) => {
 		const sortBy = url.searchParams.get('sort') || 'name';
 		const sortOrder = url.searchParams.get('order') || 'asc';
 		const search = url.searchParams.get('search') || '';
+		const usableInRecipes = url.searchParams.get('usable_in_recipes') === 'true';
 
 		// Query products from database
-		const result = queryProducts({
-			page,
-			limit,
-			categories,
-			sortBy,
-			sortOrder,
-			search
-		});
+		const result = usableInRecipes 
+			? queryUsableProducts({
+				page,
+				limit,
+				sortBy,
+				sortOrder,
+				search
+			})
+			: queryProducts({
+				page,
+				limit,
+				categories,
+				sortBy,
+				sortOrder,
+				search
+			});
 
 		// Transform products to match the expected format
 		const foods = result.products.map((product, idx) => ({
 			id: (page - 1) * limit + idx + 1,
+			code: product.code, // Add product code
 			name: product.product_name || 'Unknown',
 			type: product.main_category_en || product.categories?.split(',')[0] || '',
 			image: product.image_url || product.image_small_url || '',
@@ -39,7 +49,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			vitamins: [],
 			minerals: [],
 			benefits: product.categories?.split(',').map(s => s.trim()).filter(Boolean) || [],
-			nutriScore: (product.nutriscore_grade || '').toUpperCase()
+			nutriScore: (product.nutriscore_grade || '').toUpperCase(),
+			// Store the full product for detail view
+			_fullProduct: product
 		}));
 
 		// Get additional metadata if requested
