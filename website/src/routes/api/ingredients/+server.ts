@@ -28,7 +28,15 @@ export const GET: RequestHandler = async ({ url }) => {
         const totalRow = db.prepare(`SELECT COUNT(*) as total FROM ingredients ${whereClause}`).get(...params);
         const total = totalRow ? totalRow.total : 0;
 
-        const rows = db.prepare(`SELECT id, name, image_url FROM ingredients ${whereClause} ORDER BY name LIMIT ? OFFSET ?`).all(...params, limit, offset);
+        // First, get all ingredients with their IDs
+        const ingredientsBase = db.prepare(`SELECT id, name, image_url FROM ingredients ${whereClause} ORDER BY name LIMIT ? OFFSET ?`).all(...params, limit, offset);
+        
+        // Then count recipes for each ingredient
+        const countStmt = db.prepare(`SELECT COUNT(*) as recipeCount FROM recipe_ingredients WHERE ingredient_id = ?`);
+        const rows = (ingredientsBase as any[]).map(ing => ({
+            ...ing,
+            recipeCount: (countStmt.get(ing.id) as any)?.recipeCount || 0
+        }));
 
         return json({ data: rows, total, page, limit, letter: letterParam, q });
     } catch (err) {
