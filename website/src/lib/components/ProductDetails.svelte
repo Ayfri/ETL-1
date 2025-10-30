@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { X, ExternalLink, ChefHat } from '@lucide/svelte';
 	import type { FoodProduct } from '$lib/db';
-	import { onMount } from 'svelte';
 
-	interface Recipe {
+	export interface Recipe {
 		id: number;
 		name: string;
 		url: string;
@@ -25,9 +24,10 @@
 	interface Props {
 		product: FoodProduct | null;
 		onclose?: () => void;
+		onOpenRecipe?: (recipe: Recipe) => void;
 	}
 
-	let { product, onclose }: Props = $props();
+	let { product, onclose, onOpenRecipe }: Props = $props();
 	let recipes: Recipe[] = $state([]);
 	let matchedIngredients: MatchedIngredient[] = $state([]);
 	let loading = $state(false);
@@ -242,11 +242,9 @@
 				{:else}
 					<div class="space-y-3">
 						{#each recipes as recipe}
-							<a
-								href={recipe.url}
-								target="_blank"
-								rel="noopener noreferrer"
-								class="block p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+							<button
+								onclick={() => onOpenRecipe?.(recipe)}
+								class="block w-full p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer text-left"
 							>
 								<div class="flex gap-3">
 									{#if recipe.images}
@@ -273,9 +271,9 @@
 											{/if}
 										</div>
 									</div>
-									<ExternalLink size={16} class="text-gray-400 flex-shrink-0 mt-1" />
+									<ChefHat size={16} class="text-gray-400 flex-shrink-0 mt-1" />
 								</div>
-							</a>
+							</button>
 						{/each}
 					</div>
 				{/if}

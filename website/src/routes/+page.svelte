@@ -2,7 +2,8 @@
     import { flip } from 'svelte/animate';
     import { fly } from 'svelte/transition';
     import FoodCard from '$lib/components/FoodCard.svelte';
-    import ProductDetails from '$lib/components/ProductDetails.svelte';
+    import ProductDetails, { type Recipe } from '$lib/components/ProductDetails.svelte';
+    import RecipeModal from '$lib/components/RecipeModal.svelte';
     import type { FoodProduct } from '$lib/db';
     import { ChevronLeft, ChevronRight, ArrowUp, ArrowDown, BookOpen, Filter, ArrowUpDown } from '@lucide/svelte';
     import type { Food } from '$lib/types';
@@ -16,6 +17,8 @@
 
     let selectedFood = $state<Food | null>(null);
     let selectedProduct = $state<FoodProduct | null>(null);
+    let selectedRecipe = $state<Recipe | null>(null);
+    let showRecipeModal = $state(false);
 
     // Données chargées dynamiquement depuis le CSV via l'endpoint avec pagination
     let foods = $state<Food[]>([]);
@@ -161,6 +164,16 @@
         selectedFood = null;
         selectedProduct = null;
     }
+
+    function openRecipeModal(recipe: Recipe) {
+        selectedRecipe = recipe;
+        showRecipeModal = true;
+    }
+
+    function closeRecipeModal() {
+        showRecipeModal = false;
+        selectedRecipe = null;
+    }
 </script>
 
 <div class="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50">
@@ -289,7 +302,10 @@
 	<!-- Details Panel -->
 	<div class="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl z-50 transition-all duration-500 ease-in-out {selectedFood ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}">
 		{#if selectedProduct}
-			<ProductDetails product={selectedProduct} onclose={closeDetails} />
+			<ProductDetails product={selectedProduct} onclose={closeDetails} onOpenRecipe={openRecipeModal} />
 		{/if}
 	</div>
 </div>
+
+<!-- Recipe Modal - Rendered at root level outside all containers -->
+<RecipeModal open={showRecipeModal} recipe={selectedRecipe} onclose={closeRecipeModal} />
